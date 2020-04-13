@@ -1,5 +1,6 @@
 use serde_json::{Value};
 use ureq;
+use std::collections::HashMap;
 
 type JsonMap = serde_json::map::Map<String, Value>;
 
@@ -64,6 +65,14 @@ fn get_f64(map: &JsonMap, field: &str) -> Result<f64, MarketDataError> {
         .ok_or(MarketDataError::new_field_format_error(field))
 }
 
+fn get_f64_or_null_val(map: &JsonMap, field: &str, val: f64) -> Result<f64, MarketDataError> {
+    get_f64(map, field)
+        .or_else(|_err| {
+            get_field(map, field)?.as_null().ok_or(MarketDataError::new_field_format_error(field))
+                .map(|_null_val| val)
+        })
+}
+
 fn get_str<'a>(map: &'a JsonMap, field: &str) -> Result<&'a str, MarketDataError> {
     get_field(map, field)?.as_str()
         .ok_or(MarketDataError::new_field_format_error(field))
@@ -92,8 +101,8 @@ fn get_contract(contract: &JsonMap) -> Result<Contract, MarketDataError> {
         name: get_string(contract, "shortName")?,
         status: get_status(get_str(contract, "status")?)?,
         trade_price: get_f64(contract, "lastTradePrice")?,
-        ask_price: get_f64(contract, "bestBuyYesCost")?,
-        bid_price: get_f64(contract, "bestSellYesCost")?
+        ask_price: get_f64_or_null_val(contract, "bestBuyYesCost", 1.0)?,
+        bid_price: get_f64_or_null_val(contract, "bestSellYesCost", 0.0)?
     })
 }
 
@@ -107,32 +116,61 @@ fn get_contracts(contracts: &Vec<Value>) -> Result<Vec<Contract>, MarketDataErro
     Ok(parsed_contracts)
 }
 
+fn get_market(market_map: &JsonMap) -> Result<Market, MarketDataError> {
+    Ok(Market { 
+        id: get_u64(market_map, "id")?,
+        name: get_string(market_map, "shortName")?,
+        contracts: get_contracts(get_array(market_map, "contracts")?)?,
+        status: get_status(get_str(market_map, "status")?)?
+    })
+}
+
 pub fn fetch_market_data(id: u64) -> Result<Market, MarketDataError> {
     let api_address = format!("https://www.predictit.org/api/marketdata/markets/{}", id);
-    let resp = ureq::get(&api_address)
-        .call();
+    let resp = ureq::get(&api_address).call();
 
     if resp.ok() {
         // TODO: Wrap library errors into MarketDataError
         let data_string = resp.into_string().unwrap();
+        println!("{}", data_string);
         let market_data_value = serde_json::from_str::<Value>(&data_string)
             .map_err(|_err| MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
-        let market_data_map = market_data_value.as_object()
+        let market_map = market_data_value.as_object()
             .ok_or(MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
+        get_market(market_map)
+    } else {
+        Err(MarketDataError::new(MarketDataErrorKind::APIUnavailable))
+    }
+}
 
-        let market = Market { 
-            id: get_u64(market_data_map, "id")?,
-            name: get_string(market_data_map, "shortName")?,
-            contracts: get_contracts(get_array(market_data_map, "contracts")?)?,
-            status: get_status(get_str(market_data_map, "status")?)?
-        };
-        Ok(market)
+pub fn fetch_all_market_data() -> Result<HashMap<u64, Market>, MarketDataError> {
+    let api_address = "https://www.predictit.org/api/marketdata/all/";
+    let resp = ureq::get(&api_address).call();
+
+    let mut all_market_data_map = HashMap::new();
+
+    if resp.ok() {
+        let data_string = resp.into_string().unwrap();
+        let all_market_data = serde_json::from_str::<Value>(&data_string)
+            .map_err(|_err| MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
+        let all_market_data_obj = all_market_data.as_object()
+            .ok_or(MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
+        for market_data in get_array(all_market_data_obj, "markets")? {
+            let market_map = market_data.as_object()
+                .ok_or(MarketDataError::new_field_format_error("markets[] entry"))?;
+            let market = get_market(market_map)?;
+            all_market_data_map.insert(market.id, market);
+        }
+        Ok(all_market_data_map)
     } else {
         Err(MarketDataError::new(MarketDataErrorKind::APIUnavailable))
     }
 }
 
 pub fn test() {
-    println!("{:?}", fetch_market_data(2721).unwrap());
+    let all_market_data = fetch_all_market_data().unwrap();
+    println!("{}", all_market_data.len());
+    // println!("{:?}", fetch_all_market_data().unwrap());
+    // println!("{:?}", fetch_market_data(3633).unwrap());
 }
 
