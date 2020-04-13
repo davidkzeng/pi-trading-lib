@@ -1,5 +1,5 @@
 [package]
-name = "pi_trading"
+name = "pi_trading_lib"
 version = "0.1.0"
 authors = ["David Zeng <davidzeng.42@gmail.com>"]
 edition = "2018"
