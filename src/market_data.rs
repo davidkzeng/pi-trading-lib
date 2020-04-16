@@ -1,6 +1,13 @@
-use serde_json::{Value};
 use ureq;
+use serde_json::Value;
+use chrono::{DateTime, Utc};
+
 use std::collections::HashMap;
+
+use crate::base::{Status, PIDataState};
+use self::md_stream::PIDataIngester;
+
+mod md_stream;
 
 type JsonMap = serde_json::map::Map<String, Value>;
 
@@ -28,27 +35,26 @@ pub enum MarketDataErrorKind {
 }
 
 #[derive(Debug)]
-pub enum ContractStatus {
-    Open,
-    Closed
-}
-
-#[derive(Debug)]
-pub struct Contract {
+pub struct ContractData {
     id: u64,
     name: String,
-    status: ContractStatus,
+    status: Status,
     trade_price: f64,
     ask_price: f64,
     bid_price: f64
 }
 
 #[derive(Debug)]
-pub struct Market {
+pub struct MarketData {
     id: u64,
     name: String,
-    contracts: Vec<Contract>,
-    status: ContractStatus
+    contracts: Vec<ContractData>,
+    status: Status
+}
+
+pub struct PIDataPacket {
+    pub market_updates: HashMap<u64, MarketData>,
+    pub timestamp: DateTime<Utc>
 }
 
 fn get_field<'a>(map: &'a JsonMap, field: &str) -> Result<&'a Value, MarketDataError> {
@@ -87,16 +93,16 @@ fn get_array<'a>(map: &'a JsonMap, field: &str) -> Result<&'a Vec<Value>, Market
         .ok_or(MarketDataError::new_field_format_error(field))
 }
 
-fn get_status(status: &str) -> Result<ContractStatus, MarketDataError> {
+fn get_status(status: &str) -> Result<Status, MarketDataError> {
     match status {
-        "Open" => Ok(ContractStatus::Open),
-        "Closed" => Ok(ContractStatus::Closed),
+        "Open" => Ok(Status::Open),
+        "Closed" => Ok(Status::Closed),
         _ => Err(MarketDataError::new_field_format_error(&format!("status. Unknown status {}", status)))
     }
 }
 
-fn get_contract(contract: &JsonMap) -> Result<Contract, MarketDataError> {
-    Ok(Contract {
+fn get_contract(contract: &JsonMap) -> Result<ContractData, MarketDataError> {
+    Ok(ContractData {
         id: get_u64(contract, "id")?,
         name: get_string(contract, "shortName")?,
         status: get_status(get_str(contract, "status")?)?,
@@ -106,7 +112,7 @@ fn get_contract(contract: &JsonMap) -> Result<Contract, MarketDataError> {
     })
 }
 
-fn get_contracts(contracts: &Vec<Value>) -> Result<Vec<Contract>, MarketDataError> {
+fn get_contracts(contracts: &Vec<Value>) -> Result<Vec<ContractData>, MarketDataError> {
     let mut parsed_contracts = Vec::new();
     for contract in contracts {
         let contract_map = contract.as_object()
@@ -116,8 +122,8 @@ fn get_contracts(contracts: &Vec<Value>) -> Result<Vec<Contract>, MarketDataErro
     Ok(parsed_contracts)
 }
 
-fn get_market(market_map: &JsonMap) -> Result<Market, MarketDataError> {
-    Ok(Market { 
+fn get_market(market_map: &JsonMap) -> Result<MarketData, MarketDataError> {
+    Ok(MarketData { 
         id: get_u64(market_map, "id")?,
         name: get_string(market_map, "shortName")?,
         contracts: get_contracts(get_array(market_map, "contracts")?)?,
@@ -125,7 +131,7 @@ fn get_market(market_map: &JsonMap) -> Result<Market, MarketDataError> {
     })
 }
 
-pub fn fetch_market_data(id: u64) -> Result<Market, MarketDataError> {
+pub fn fetch_market_data(id: u64) -> Result<MarketData, MarketDataError> {
     let api_address = format!("https://www.predictit.org/api/marketdata/markets/{}", id);
     let resp = ureq::get(&api_address).call();
 
@@ -143,7 +149,7 @@ pub fn fetch_market_data(id: u64) -> Result<Market, MarketDataError> {
     }
 }
 
-pub fn fetch_all_market_data() -> Result<HashMap<u64, Market>, MarketDataError> {
+pub fn fetch_all_market_data() -> Result<PIDataPacket, MarketDataError> {
     let api_address = "https://www.predictit.org/api/marketdata/all/";
     let resp = ureq::get(&api_address).call();
 
@@ -161,16 +167,15 @@ pub fn fetch_all_market_data() -> Result<HashMap<u64, Market>, MarketDataError> 
             let market = get_market(market_map)?;
             all_market_data_map.insert(market.id, market);
         }
-        Ok(all_market_data_map)
+        // TODO: Get ts from markets, assert that the timestamp is always the same.
+        Ok(PIDataPacket { market_updates: all_market_data_map, timestamp: Utc::now() })
     } else {
         Err(MarketDataError::new(MarketDataErrorKind::APIUnavailable))
     }
 }
 
-pub fn test() {
-    let all_market_data = fetch_all_market_data().unwrap();
-    println!("{}", all_market_data.len());
-    // println!("{:?}", fetch_all_market_data().unwrap());
-    // println!("{:?}", fetch_market_data(3633).unwrap());
+pub fn fetch_and_update_state(state: &mut PIDataState) {
+    let new_data = fetch_all_market_data().unwrap();
+    let mut ingester = PIDataIngester::new(state);
+    ingester.ingest_data(&new_data);
 }
-
