@@ -1,4 +1,5 @@
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
+
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -7,6 +8,7 @@ pub enum Status {
     Closed
 }
 
+#[derive(Debug)]
 pub struct Market {
     pub id: u64,
     pub name: String,
@@ -14,6 +16,7 @@ pub struct Market {
     pub status: Status,
 }
 
+#[derive(Debug)]
 pub struct Contract {
     pub id: u64,
     pub name: String,
@@ -22,7 +25,7 @@ pub struct Contract {
     pub prices: ContractPrice
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ContractPrice {
     trade_price: f64,
     ask_price: f64,
@@ -37,14 +40,16 @@ impl ContractPrice {
 
 // TODO: Define invariants
 // TODO: Add TS
+#[derive(Debug)]
 pub struct PIDataState {
     markets: HashMap<u64, Market>,
-    contracts: HashMap<u64, Contract>
+    contracts: HashMap<u64, Contract>,
+    pi_data_ts: Option<DateTime<Utc>>
 }
 
 impl PIDataState {
     pub fn new() -> PIDataState {
-        PIDataState { markets: HashMap::new(), contracts: HashMap::new() }
+        PIDataState { markets: HashMap::new(), contracts: HashMap::new(), pi_data_ts: None }
     }
 
     pub fn get_market_mut(&mut self, id: u64) -> Option<&mut Market> {
@@ -65,5 +70,15 @@ impl PIDataState {
 
     pub fn add_market(&mut self, market: Market) {
         self.markets.insert(market.id, market);
+    }
+
+    pub fn update_pi_data_ts(&mut self, ts: &DateTime<Utc>) {
+        match &self.pi_data_ts {
+            None => self.pi_data_ts = Some(*ts),
+            Some(old_ts) => {
+                assert!(ts >= old_ts);
+                self.pi_data_ts = Some(*ts)
+            }
+        }
     }
 }
