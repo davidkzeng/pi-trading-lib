@@ -33,13 +33,12 @@ pub struct ContractPrice {
 }
 
 impl ContractPrice {
-    pub fn new(trade_price: f64, ask_price: f64, bid_price: f64) -> ContractPrice {
+    pub fn new(trade_price: f64, ask_price: f64, bid_price: f64) -> Self {
         ContractPrice { trade_price: trade_price, ask_price: ask_price, bid_price: bid_price }
     }
 }
 
 // TODO: Define invariants
-// TODO: Add TS
 #[derive(Debug)]
 pub struct PIDataState {
     markets: HashMap<u64, Market>,
@@ -48,7 +47,7 @@ pub struct PIDataState {
 }
 
 impl PIDataState {
-    pub fn new() -> PIDataState {
+    pub fn new() -> Self {
         PIDataState { markets: HashMap::new(), contracts: HashMap::new(), pi_data_ts: None }
     }
 

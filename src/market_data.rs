@@ -1,9 +1,9 @@
+use std::collections::HashMap;
+
 use ureq;
 use serde_json::Value;
 use chrono::{DateTime, NaiveDateTime, Utc, LocalResult, Duration, TimeZone};
 use chrono_tz::US::Eastern;
-
-use std::collections::HashMap;
 
 use crate::base::Status;
 
@@ -12,6 +12,8 @@ pub mod md_stream;
 type JsonMap = serde_json::map::Map<String, Value>;
 
 const TIMESTAMP_TOLERANCE_SECS : i64 = 5 * 60;
+const API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/all/";
+const MARKET_API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/markets/{}";
 
 #[derive(Debug)]
 pub struct MarketDataError {
@@ -19,11 +21,11 @@ pub struct MarketDataError {
 }
 
 impl MarketDataError {
-    pub fn new(kind: MarketDataErrorKind) -> MarketDataError {
+    pub fn new(kind: MarketDataErrorKind) -> Self {
         MarketDataError { kind: kind }
     }
 
-    pub fn new_field_format_error(field: &str) -> MarketDataError {
+    pub fn new_field_format_error(field: &str) -> Self {
         MarketDataError::new(MarketDataErrorKind::FieldFormatError(field.to_owned()))
     }
 }
@@ -55,6 +57,7 @@ pub struct MarketData {
     status: Status
 }
 
+#[derive(Debug)]
 pub struct PIDataPacket {
     pub market_updates: HashMap<u64, MarketData>,
     pub timestamp: DateTime<Utc>
@@ -135,7 +138,7 @@ fn get_market(market_map: &JsonMap) -> Result<MarketData, MarketDataError> {
 }
 
 pub fn fetch_market_data(id: u64) -> Result<MarketData, MarketDataError> {
-    let api_address = format!("https://www.predictit.org/api/marketdata/markets/{}", id);
+    let api_address = format!("{} {}", MARKET_API_ADDRESS, id);
     let resp = ureq::get(&api_address).call();
 
     if resp.ok() {
@@ -199,14 +202,13 @@ fn get_confirmed_timestamp_utc<Tz: TimeZone>(parse_result: &LocalResult<DateTime
 }
 
 pub fn fetch_all_market_data() -> Result<PIDataPacket, MarketDataError> {
-    let api_address = "https://www.predictit.org/api/marketdata/all/";
+    let api_address = API_ADDRESS;
     let resp = ureq::get(&api_address).call();
 
     let mut all_market_data_map = HashMap::new();
 
     if resp.ok() {
         let data_string = resp.into_string().unwrap();
-        println!("{}", data_string);
         let all_market_data = serde_json::from_str::<Value>(&data_string)
             .map_err(|_err| MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
         let all_market_data_obj = all_market_data.as_object()

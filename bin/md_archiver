@@ -1,0 +1,16 @@
+#!/bin/bash
+
+if [ "$#" -ne 1 ]; then
+    echo "missing parameters"
+    exit 1
+fi
+
+save_file=$1
+
+package_dir=$(dirname $(dirname $(realpath $0)))
+echo $package_dir
+
+curtime=$(date +%s%N | cut -b1-13)
+dietime=$((curtime + 600 * 1000))
+
+$package_dir/target/release/md_archiver $save_file $dietime 
