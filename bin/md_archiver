@@ -1,16 +1,19 @@
 #!/bin/bash
 
 if [ "$#" -ne 1 ]; then
-    echo "missing parameters"
+    echo "usage: md_archiver [save_directory]"
     exit 1
 fi
 
-save_file=$1
-
+save_dir=$1
 package_dir=$(dirname $(dirname $(realpath $0)))
-echo $package_dir
 
-curtime=$(date +%s%N | cut -b1-13)
-dietime=$((curtime + 600 * 1000))
+cur_date=$(date -u +%Y%m%d)
+save_file="${save_dir}/${cur_date}.json"
+die_time=$(date -u -d "today 23:59:59" +%s%3N)
 
-$package_dir/target/release/md_archiver $save_file $dietime 
+if [ -e "$save_file" ]; then
+    echo "Warning: $save_file already exists"
+fi
+
+$package_dir/target/release/md_archiver $save_file $die_time 

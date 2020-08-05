@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
 
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
     Open,
     Closed

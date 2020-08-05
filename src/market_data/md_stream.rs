@@ -1,5 +1,11 @@
+use std::collections::{HashSet, HashMap};
+
 use crate::base::{PIDataState, Contract, Market, ContractPrice};
-use crate::market_data::{ContractData, MarketData, PIDataPacket};
+use crate::market_data::{
+    ContractData,
+    MarketData,
+    PIDataPacket,
+};
 
 
 fn ingest_one_contract_data(state: &mut PIDataState, market_id: u64, contract_data: &ContractData) -> bool {
@@ -23,7 +29,7 @@ fn ingest_one_contract_data(state: &mut PIDataState, market_id: u64, contract_da
         let new_contract = Contract {
             id: contract_data.id,
             name: contract_data.name.clone(),
-            market_id: market_id,
+            market_id,
             status: contract_data.status,
             prices: ContractPrice::new(contract_data.trade_price,
                 contract_data.ask_price, contract_data.bid_price)
@@ -73,4 +79,17 @@ pub fn ingest_data(state: &mut PIDataState, data: &PIDataPacket) -> Vec<u64> {
     }
     state.update_pi_data_ts(&data.timestamp);
     updated_markets
+}
+
+pub fn ingest_data_and_get_filtered(state: &mut PIDataState, data: PIDataPacket) -> PIDataPacket {
+    let updated_markets = ingest_data(state, &data);
+    let updated_markets_set: HashSet<u64> = updated_markets
+        .iter().cloned().collect();
+
+    let timestamp = data.timestamp.clone();
+    let filtered_updates: HashMap<u64, MarketData> = data.market_updates.into_iter()
+        .filter(|(k, _v)| updated_markets_set.contains(k))
+        .collect();
+
+    PIDataPacket { market_updates: filtered_updates, timestamp }
 }

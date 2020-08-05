@@ -1,29 +1,14 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::File;
 use std::io::Write;
-use std::collections::{HashSet, HashMap};
 use std::{env, thread, time};
 use std::convert::TryInto;
 
-use pi_trading_lib::market_data::{self, PIDataPacket, MarketDataError, MarketData};
-use pi_trading_lib::market_data::md_stream;
-use pi_trading_lib::base::{PIDataState};
+use pi_trading_lib::market_data::{MarketDataLive, MarketDataSource, md_stream};
+use pi_trading_lib::base::PIDataState;
 
 const RETRY_LIMIT: u64 = 5;
-
-fn fetch_data_and_get_update(state: &mut PIDataState) -> Result<PIDataPacket, MarketDataError> {
-    let data_packet = market_data::fetch_all_market_data()?;
-    let updated_markets = md_stream::ingest_data(state, &data_packet);
-    let updated_markets_set: HashSet<u64> = updated_markets
-        .iter().cloned().collect();
-
-    let timestamp = data_packet.timestamp.clone();
-    let filtered_updates: HashMap<u64, MarketData> = data_packet.market_updates.into_iter()
-        .filter(|(k, _v)| updated_markets_set.contains(k))
-        .collect();
-
-    Ok(PIDataPacket { market_updates: filtered_updates, timestamp: timestamp })
-}
+const POLL_INTERVAL_SECS: u64 = 60; // PredictIt API update rate
 
 fn current_time_millis() -> u64 {
     SystemTime::now()
@@ -42,13 +27,16 @@ fn main() {
     let output_file_name = &args[1];
     let die_time_millis = args[2].parse::<u64>().expect("Unable to parse die time");
 
-    let mut initial_state = PIDataState::new();
+    let mut data_state = PIDataState::new();
     let mut output_file = File::create(output_file_name).expect("Unable to create output file");
+    let mut loop_counter = 0;
+    
+    let mut api_market_data = MarketDataLive;
 
     println!("Starting market data reading");
     let end_time = loop {
         let loop_start_time = current_time_millis();
-        let next_loop_time = current_time_millis() + 5 * 1000;
+        let next_loop_time = current_time_millis() + POLL_INTERVAL_SECS * 1000;
 
         if loop_start_time > die_time_millis {
             break loop_start_time;
@@ -56,12 +44,15 @@ fn main() {
         println!("Fetch market data at time {}", current_time_millis());
 
         let mut valid_data = false;
+        // Consider moving logic down into MarketDataLive
         for _err_counter in 0..RETRY_LIMIT {
-            match fetch_data_and_get_update(&mut initial_state) {
-                Ok(update_data) => {
-                    let update_data_str = format!("{:?}", update_data);
-                    println!("{}", update_data_str);
-                    output_file.write_all(update_data_str.as_bytes()).expect("Unable to write data");
+            match api_market_data.fetch_market_data() {
+                Ok(market_data) => {
+                    let filtered_update = md_stream::ingest_data_and_get_filtered(&mut data_state, market_data);
+                    let update_data_json = serde_json::to_string(&filtered_update).unwrap();
+                    println!("{}", update_data_json);
+                    output_file.write_all(update_data_json.as_bytes()).expect("Unable to write data");
+                    output_file.write_all("\n".as_bytes()).expect("Unable to write new line");
                     valid_data = true;
                     break;
                 },
@@ -75,13 +66,18 @@ fn main() {
             break loop_start_time;
         }
 
+        if loop_counter % 60 == 0 {
+            output_file.flush().unwrap();
+        }
+
         let mut sleep_time: i64 = TryInto::<i64>::try_into(next_loop_time).unwrap() -
             TryInto::<i64>::try_into(current_time_millis()).unwrap();
         if sleep_time < 0 {
-            println!("Falling behind market data update");
+            println!("Warning: falling behind market data updates");
             sleep_time = 0;
         }
         thread::sleep(time::Duration::from_millis(sleep_time.try_into().unwrap()));
+        loop_counter += 1;
     };
 
     println!("Finished market data archiving at time {}", end_time);
