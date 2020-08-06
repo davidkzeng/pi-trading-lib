@@ -62,11 +62,37 @@ pub type MarketDataResult = Result<PIDataPacket, MarketDataError>;
 pub trait MarketDataSource {
     fn fetch_market_data(&mut self) -> MarketDataResult;
 }
-pub struct MarketDataLive;
+pub struct MarketDataLive {
+    retry_limit: u64
+}
+
+impl MarketDataLive {
+    pub fn new() -> Self {
+        MarketDataLive { retry_limit: 1 }
+    }
+
+    pub fn new_with_retry(retry_limit: u64) -> Self {
+        MarketDataLive { retry_limit }
+    }
+}
 
 impl MarketDataSource for MarketDataLive {
     fn fetch_market_data(&mut self) -> MarketDataResult {
-        api_parser::fetch_api_market_data()
+        let mut attempts = 0;
+        loop {
+            match api_parser::fetch_api_market_data() {
+                Ok(market_data) => {
+                    break Ok(market_data);
+                },
+                Err(err) => {
+                    attempts += 1;
+                    if attempts >= self.retry_limit {
+                        break Err(err);
+                    }
+                    println!("Encountered market data error {:?}", err);
+                }
+            }
+        }
     }
 }
 

@@ -7,7 +7,7 @@ use std::convert::TryInto;
 use pi_trading_lib::market_data::{MarketDataLive, MarketDataSource, md_stream};
 use pi_trading_lib::base::PIDataState;
 
-const RETRY_LIMIT: u64 = 5;
+const API_RETRY_LIMIT: u64 = 5;
 const POLL_INTERVAL_SECS: u64 = 60; // PredictIt API update rate
 
 fn current_time_millis() -> u64 {
@@ -31,7 +31,7 @@ fn main() {
     let mut output_file = File::create(output_file_name).expect("Unable to create output file");
     let mut loop_counter = 0;
     
-    let mut api_market_data = MarketDataLive;
+    let mut api_market_data = MarketDataLive::new_with_retry(API_RETRY_LIMIT);
 
     println!("Starting market data reading");
     let end_time = loop {
@@ -43,26 +43,17 @@ fn main() {
         }
         println!("Fetch market data at time {}", current_time_millis());
 
-        let mut valid_data = false;
-        // Consider moving logic down into MarketDataLive
-        for _err_counter in 0..RETRY_LIMIT {
-            match api_market_data.fetch_market_data() {
-                Ok(market_data) => {
-                    let filtered_update = md_stream::ingest_data_and_get_filtered(&mut data_state, market_data);
-                    let update_data_json = serde_json::to_string(&filtered_update).unwrap();
-                    output_file.write_all(update_data_json.as_bytes()).expect("Unable to write data");
-                    output_file.write_all("\n".as_bytes()).expect("Unable to write new line");
-                    valid_data = true;
-                    break;
-                },
-                Err(err) => {
-                    println!("Encountered market data error {:?}", err);
-                }
+        match api_market_data.fetch_market_data() {
+            Ok(market_data) => {
+                let filtered_update = md_stream::ingest_data_and_get_filtered(&mut data_state, market_data);
+                let update_data_json = serde_json::to_string(&filtered_update).unwrap();
+                output_file.write_all(update_data_json.as_bytes()).expect("Unable to write data");
+                output_file.write_all("\n".as_bytes()).expect("Unable to write new line");
+            },
+            Err(err) => {
+                println!("Market data error {:?}, exiting loop", err);
+                break loop_start_time;
             }
-        }
-        if !valid_data {
-            println!("Too many market data errors");
-            break loop_start_time;
         }
 
         if loop_counter % 60 == 0 {
