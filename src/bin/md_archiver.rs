@@ -50,7 +50,6 @@ fn main() {
                 Ok(market_data) => {
                     let filtered_update = md_stream::ingest_data_and_get_filtered(&mut data_state, market_data);
                     let update_data_json = serde_json::to_string(&filtered_update).unwrap();
-                    println!("{}", update_data_json);
                     output_file.write_all(update_data_json.as_bytes()).expect("Unable to write data");
                     output_file.write_all("\n".as_bytes()).expect("Unable to write new line");
                     valid_data = true;

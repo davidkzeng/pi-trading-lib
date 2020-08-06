@@ -190,6 +190,7 @@ pub fn fetch_api_market_data() -> MarketDataResult {
         // TODO: Get ts from markets, assert that the timestamp is always the same.
         Ok(PIDataPacket { market_updates: all_market_data_map, timestamp: timestamp.unwrap() })
     } else {
+        println!("{:?}", resp);
         Err(MarketDataError::new(MarketDataErrorKind::APIUnavailable))
     }
 }

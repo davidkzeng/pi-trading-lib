@@ -21,6 +21,6 @@ path = "src/bin/test.rs"
 [dependencies]
 serde_json="1.0"
 serde = { version = "1.0", features = ["derive"] }
-ureq = { version = "0.12.0", features = ["charset"] }
+ureq = { version = "0.12.0", features = [] }
 chrono= { version = "0.4", features = ["serde"] }
 chrono-tz="0.5"
