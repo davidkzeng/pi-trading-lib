@@ -171,24 +171,26 @@ pub fn fetch_api_market_data() -> MarketDataResult {
             .map_err(|_err| MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
         let all_market_data_obj = all_market_data.as_object()
             .ok_or(MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
-        let mut timestamp = None;
+
+        let mut latest_timestamp = None;
         for market_data in get_array(all_market_data_obj, "markets")? {
             let market_map = market_data.as_object()
                 .ok_or(MarketDataError::new_field_format_error("markets[] entry"))?;
             let market = get_market(market_map)?;
             all_market_data_map.insert(market.id, market);
-            if timestamp.is_none() {
-                let timestamp_str = get_str(market_map, "timeStamp")?;
-                let timestamp_et = 
-                    NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-                        .map_err(|_err| MarketDataError::new_field_format_error("timestamp"))?;
-                let timestamp_utc = get_confirmed_timestamp_utc(&Eastern.from_local_datetime(&timestamp_et),
-                    timestamp_str, &Duration::seconds(TIMESTAMP_TOLERANCE_SECS))?;
-                timestamp = Some(timestamp_utc);
-            }
+            let timestamp_str = get_str(market_map, "timeStamp")?;
+            let timestamp_et = 
+                NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
+                    .map_err(|_err| MarketDataError::new_field_format_error("timestamp"))?;
+            let timestamp_utc = get_confirmed_timestamp_utc(&Eastern.from_local_datetime(&timestamp_et),
+                timestamp_str, &Duration::seconds(TIMESTAMP_TOLERANCE_SECS))?;
+            latest_timestamp = match latest_timestamp {
+                None => Some(timestamp_utc),
+                Some(prev_timestamp) => Some(std::cmp::max(prev_timestamp, timestamp_utc))
+            };
         }
-        // TODO: Get ts from markets, assert that the timestamp is always the same.
-        Ok(PIDataPacket { market_updates: all_market_data_map, timestamp: timestamp.unwrap() })
+
+        Ok(PIDataPacket { market_updates: all_market_data_map, timestamp: latest_timestamp.unwrap() })
     } else {
         println!("{:?}", resp);
         Err(MarketDataError::new(MarketDataErrorKind::APIUnavailable))
