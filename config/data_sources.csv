@@ -1,2 +1,3 @@
 name,location
-market_data,data/market_data
+market_data_raw,data/market_data_raw/{date}.json
+market_data_daily,data/market_data_daily/{date}.csv

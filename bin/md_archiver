@@ -16,4 +16,4 @@ if [ -e "$save_file" ]; then
     echo "Warning: $save_file already exists"
 fi
 
-$package_dir/target/release/md_archiver $save_file $die_time
+$package_dir/rust/target/release/md_archiver $save_file $die_time
