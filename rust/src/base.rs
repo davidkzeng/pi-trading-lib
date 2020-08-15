@@ -15,6 +15,7 @@ pub struct Market {
     pub name: String,
     pub contracts: Vec<u64>,
     pub status: Status,
+    pub data_ts: DateTime<Utc>
 }
 
 #[derive(Debug)]
@@ -35,7 +36,7 @@ pub struct ContractPrice {
 
 impl ContractPrice {
     pub fn new(trade_price: f64, ask_price: f64, bid_price: f64) -> Self {
-        ContractPrice { trade_price: trade_price, ask_price: ask_price, bid_price: bid_price }
+        ContractPrice { trade_price, ask_price, bid_price }
     }
 }
 
@@ -44,12 +45,11 @@ impl ContractPrice {
 pub struct PIDataState {
     markets: HashMap<u64, Market>,
     contracts: HashMap<u64, Contract>,
-    pi_data_ts: Option<DateTime<Utc>>
 }
 
 impl PIDataState {
     pub fn new() -> Self {
-        PIDataState { markets: HashMap::new(), contracts: HashMap::new(), pi_data_ts: None }
+        PIDataState { markets: HashMap::new(), contracts: HashMap::new() }
     }
 
     pub fn get_market_mut(&mut self, id: u64) -> Option<&mut Market> {
@@ -70,15 +70,5 @@ impl PIDataState {
 
     pub fn add_market(&mut self, market: Market) {
         self.markets.insert(market.id, market);
-    }
-
-    pub fn update_pi_data_ts(&mut self, ts: &DateTime<Utc>) {
-        match &self.pi_data_ts {
-            None => self.pi_data_ts = Some(*ts),
-            Some(old_ts) => {
-                assert!(ts >= old_ts);
-                self.pi_data_ts = Some(*ts)
-            }
-        }
     }
 }

@@ -44,20 +44,26 @@ fn ingest_one_market_data(state: &mut PIDataState, market_data: &MarketData) -> 
     let mut updated = false;
     let market_id = market_data.id;
     if let Some(market) = state.get_market_mut(market_id) {
-        if market.status != market_data.status {
-            market.status = market_data.status;
-            updated = true;
-        }
-        for contract_data in &market_data.contracts {
-            let contract_update = ingest_one_contract_data(state,market_id, contract_data);
-            updated |= contract_update;
+        if market_data.timestamp >= market.data_ts {
+            if market.status != market_data.status {
+                market.status = market_data.status;
+                updated = true;
+            }
+            for contract_data in &market_data.contracts {
+                let contract_update = ingest_one_contract_data(state,market_id, contract_data);
+                updated |= contract_update;
+            }
+        } else {
+            println!("Warning: Timestamp for market {} went backwards from {} to {}", market.id, 
+                market.data_ts, market_data.timestamp);
         }
     } else {
         let new_market = Market {
             id: market_id,
             name: market_data.name.clone(),
             status: market_data.status,
-            contracts: Vec::new()
+            contracts: Vec::new(),
+            data_ts: market_data.timestamp
         };
         state.add_market(new_market);
         for contract_data in &market_data.contracts {
@@ -77,7 +83,6 @@ pub fn ingest_data(state: &mut PIDataState, data: &PIDataPacket) -> Vec<u64> {
             updated_markets.push(market_id);
         }
     }
-    state.update_pi_data_ts(&data.timestamp);
     updated_markets
 }
 
@@ -86,10 +91,9 @@ pub fn ingest_data_and_get_filtered(state: &mut PIDataState, data: PIDataPacket)
     let updated_markets_set: HashSet<u64> = updated_markets
         .iter().cloned().collect();
 
-    let timestamp = data.timestamp.clone();
     let filtered_updates: HashMap<u64, MarketData> = data.market_updates.into_iter()
         .filter(|(k, _v)| updated_markets_set.contains(k))
         .collect();
 
-    PIDataPacket { market_updates: filtered_updates, timestamp }
+    PIDataPacket { market_updates: filtered_updates }
 }

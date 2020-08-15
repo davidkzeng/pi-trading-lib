@@ -11,17 +11,11 @@ pub mod md_stream;
 pub mod api_parser;
 
 #[derive(Debug)]
-pub struct MarketDataError {
-    kind: MarketDataErrorKind,
-}
+pub struct MarketDataError(MarketDataErrorKind);
 
 impl MarketDataError {
-    pub fn new(kind: MarketDataErrorKind) -> Self {
-        MarketDataError { kind }
-    }
-
     pub fn new_field_format_error(field: &str) -> Self {
-        MarketDataError::new(MarketDataErrorKind::FieldFormatError(field.to_owned()))
+        MarketDataError(MarketDataErrorKind::FieldFormatError(field.to_owned()))
     }
 }
 
@@ -49,13 +43,13 @@ pub struct MarketData {
     id: u64,
     name: String,
     contracts: Vec<ContractData>,
-    status: Status
+    status: Status,
+    timestamp: DateTime<Utc>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PIDataPacket {
     pub market_updates: HashMap<u64, MarketData>,
-    pub timestamp: DateTime<Utc>
 }
 
 pub type MarketDataResult = Result<PIDataPacket, MarketDataError>;

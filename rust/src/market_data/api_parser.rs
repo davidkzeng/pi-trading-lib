@@ -22,7 +22,7 @@ const API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/all/
 const MARKET_API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/markets/{}";
 
 fn get_field<'a>(map: &'a JsonMap, field: &str) -> Result<&'a Value, MarketDataError> {
-    map.get(field).ok_or(MarketDataError::new(MarketDataErrorKind::FieldUnavailable(field.to_owned())))
+    map.get(field).ok_or(MarketDataError(MarketDataErrorKind::FieldUnavailable(field.to_owned())))
 }
 
 fn get_u64(map: &JsonMap, field: &str) -> Result<u64, MarketDataError> {
@@ -91,7 +91,8 @@ fn get_market(market_map: &JsonMap) -> Result<MarketData, MarketDataError> {
         id: get_u64(market_map, "id")?,
         name: get_string(market_map, "shortName")?,
         contracts: get_contracts(get_array(market_map, "contracts")?)?,
-        status: get_status(get_str(market_map, "status")?)?
+        status: get_status(get_str(market_map, "status")?)?,
+        timestamp: get_utc_timestamp(get_str(market_map, "timeStamp")?)?
     })
 }
 
@@ -104,12 +105,12 @@ pub fn fetch_market_data(id: u64) -> Result<MarketData, MarketDataError> {
         let data_string = resp.into_string().unwrap();
         println!("{}", data_string);
         let market_data_value = serde_json::from_str::<Value>(&data_string)
-            .map_err(|_err| MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
+            .map_err(|_err| MarketDataError(MarketDataErrorKind::JsonParseError))?;
         let market_map = market_data_value.as_object()
-            .ok_or(MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
+            .ok_or(MarketDataError(MarketDataErrorKind::JsonParseError))?;
         get_market(market_map)
     } else {
-        Err(MarketDataError::new(MarketDataErrorKind::APIUnavailable))
+        Err(MarketDataError(MarketDataErrorKind::APIUnavailable))
     }
 }
 
@@ -121,23 +122,24 @@ fn abs_duration(duration: Duration) -> Duration {
     }
 }
 
-fn get_confirmed_timestamp_utc<Tz: TimeZone>(parse_result: &LocalResult<DateTime<Tz>>, timestamp_str: &str,
-    tolerance: &Duration)
-    -> Result<DateTime<Utc>, MarketDataError> {
-    // TODO: Extract out tolerance to be a parameter
+fn get_utc_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>, MarketDataError> {
     let current_time = Utc::now().with_timezone(&Utc);
-    match parse_result {
+    let tolerance = Duration::seconds(TIMESTAMP_TOLERANCE_SECS);
+
+    let local_datetime = NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
+            .map_err(|_err| MarketDataError::new_field_format_error("timestamp"))?;
+    match Eastern.from_local_datetime(&local_datetime) {
         LocalResult::None => {
             let err_string = format!("Invalid timezone timestamp: {}", timestamp_str);
-            Err(MarketDataError::new(MarketDataErrorKind::TimestampError(err_string)))
+            Err(MarketDataError(MarketDataErrorKind::TimestampError(err_string)))
         },
         LocalResult::Single(res) => {
             let res_utc = res.with_timezone(&Utc);
-            if &abs_duration(res_utc - current_time) <= tolerance {
+            if abs_duration(res_utc - current_time) <= tolerance {
                 Ok(res_utc)
             } else {
                 let err_string = format!("Timestamp {} too far from current time {}", res_utc, current_time);
-                Err(MarketDataError::new(MarketDataErrorKind::TimestampError(err_string)))
+                Err(MarketDataError(MarketDataErrorKind::TimestampError(err_string)))
             }
         },
         LocalResult::Ambiguous(res1, res2) => {
@@ -145,14 +147,14 @@ fn get_confirmed_timestamp_utc<Tz: TimeZone>(parse_result: &LocalResult<DateTime
             let res2_utc = res2.with_timezone(&Utc);
             let diff_min = abs_duration(res1_utc - current_time);
             let diff_max = abs_duration(res2_utc - current_time);
-            if diff_min < diff_max && &diff_min <= tolerance {
+            if diff_min < diff_max && diff_min <= tolerance {
                 Ok(res1.with_timezone(&Utc))
-            } else if diff_max <= diff_min && &diff_max <= tolerance {
+            } else if diff_max <= diff_min && diff_max <= tolerance {
                 Ok(res2.with_timezone(&Utc))
             } else {
                 let err_string = format!("Both timestamps ({}, {}) too far from current time {}",
                     res1_utc, res2_utc, current_time);
-                Err(MarketDataError::new(MarketDataErrorKind::TimestampError(err_string)))
+                Err(MarketDataError(MarketDataErrorKind::TimestampError(err_string)))
             }
         }
     }
@@ -168,31 +170,20 @@ pub fn fetch_api_market_data() -> MarketDataResult {
     if resp.ok() {
         let data_string = resp.into_string().unwrap();
         let all_market_data = serde_json::from_str::<Value>(&data_string)
-            .map_err(|_err| MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
+            .map_err(|_err| MarketDataError(MarketDataErrorKind::JsonParseError))?;
         let all_market_data_obj = all_market_data.as_object()
-            .ok_or(MarketDataError::new(MarketDataErrorKind::JsonParseError))?;
+            .ok_or(MarketDataError(MarketDataErrorKind::JsonParseError))?;
 
-        let mut latest_timestamp = None;
         for market_data in get_array(all_market_data_obj, "markets")? {
             let market_map = market_data.as_object()
                 .ok_or(MarketDataError::new_field_format_error("markets[] entry"))?;
             let market = get_market(market_map)?;
             all_market_data_map.insert(market.id, market);
-            let timestamp_str = get_str(market_map, "timeStamp")?;
-            let timestamp_et = 
-                NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-                    .map_err(|_err| MarketDataError::new_field_format_error("timestamp"))?;
-            let timestamp_utc = get_confirmed_timestamp_utc(&Eastern.from_local_datetime(&timestamp_et),
-                timestamp_str, &Duration::seconds(TIMESTAMP_TOLERANCE_SECS))?;
-            latest_timestamp = match latest_timestamp {
-                None => Some(timestamp_utc),
-                Some(prev_timestamp) => Some(std::cmp::max(prev_timestamp, timestamp_utc))
-            };
         }
 
-        Ok(PIDataPacket { market_updates: all_market_data_map, timestamp: latest_timestamp.unwrap() })
+        Ok(PIDataPacket { market_updates: all_market_data_map })
     } else {
         println!("{:?}", resp);
-        Err(MarketDataError::new(MarketDataErrorKind::APIUnavailable))
+        Err(MarketDataError(MarketDataErrorKind::APIUnavailable))
     }
 }
