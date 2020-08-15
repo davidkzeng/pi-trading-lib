@@ -17,13 +17,15 @@ class MarketData:
     def __init__(self, work_dir: work_dir.WorkDir):
         self.work_dir = work_dir
 
-    def get_raw(self, date: datetime.date) -> t.List[t.Dict]:
+    def get_raw(self, date: datetime.date) -> t.Optional[t.List[t.Dict]]:
         # Temp we should just do this in rust
         market_data_file = data_sources.get_data_file('market_data_raw', date)
-        assert os.path.exists(market_data_file)
+        if not os.path.exists(market_data_file):
+            logging.warn('No raw market data for {date}'.format(date=str(date)))
+            return None
 
         market_updates = []
-        logging.info('Loading %s' % market_data_file)
+        logging.info('Loading raw market data file %s' % market_data_file)
         with open(market_data_file, 'r') as market_data_f:
             for line in market_data_f:
                 line = line.rstrip()
@@ -31,12 +33,15 @@ class MarketData:
                 market_updates.extend(updates.values())
         return market_updates
 
-    def get_csv(self, date: datetime.date) -> str:
+    def get_csv(self, date: datetime.date) -> t.Optional[str]:
         md_csv = self.work_dir.md_csv(date)
         if os.path.exists(md_csv):
             return md_csv
 
         raw_market_data = self.get_raw(date)
+        if raw_market_data is None:
+            return None
+
         for update in raw_market_data:
             update['timestamp'] = dateutil.parser.isoparse(update['timestamp'])
 
@@ -70,14 +75,19 @@ class MarketData:
         return md_csv
 
     def get_df(self, start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
-        """Get market data dataframe, inclusie dates"""
+        """Get market data dataframe, including start_date and end_date"""
+        assert end_date >= start_date
+
         date_dfs = []
 
-        cur_date = start_date
-        while cur_date <= end_date:
+        num_dates = (end_date - start_date).days + 1
+        for i in range(num_dates):
+            cur_date = start_date + datetime.timedelta(days=i)
             market_data_csv = self.get_csv(cur_date)
+            if market_data_csv is None:
+                continue
+
             with open(market_data_csv, 'r') as market_data_csv_f:
                 date_dfs.append(pd.read_csv(market_data_csv_f))
-            cur_date += datetime.timedelta(days=1)
 
         return pd.concat(date_dfs, axis=0, ignore_index=True)
