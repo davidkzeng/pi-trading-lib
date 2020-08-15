@@ -1,16 +1,14 @@
 all: rust python
 release: rust-release
-.PHONY: all
 
 python:
-	flake8 python/ --config python/.flake8
-	(cd python/ && mypy -p pi_trading_lib)
-.PHONY: python
+	cd python/ && pipenv run flake8 --config .flake8
+	cd python/ && pipenv run mypy -p pi_trading_lib
 
 rust:
 	cargo build --manifest-path=rust/Cargo.toml
-.PHONY: rust
 
 rust-release:
 	cargo build --release --manifest-path=rust/Cargo.toml
-.PHONY: rust
+
+.PHONY: all python rust rust-release

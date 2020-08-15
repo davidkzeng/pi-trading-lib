@@ -1,0 +1,7 @@
+#!/bin/bash
+
+package_dir=$(dirname $(dirname $(realpath "$0")))
+target=$(realpath "$1")
+shift
+
+cd "$package_dir/python" && pipenv run python "$target" "$@"

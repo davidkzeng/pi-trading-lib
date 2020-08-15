@@ -1,13 +1,14 @@
-from typing import Dict, Optional
+import typing as t
 import csv
 import functools
 import os.path
+import datetime
 
 import pi_trading_lib
 
 
 @functools.lru_cache()
-def _get_data_sources() -> Dict[str, str]:
+def _get_data_sources() -> t.Dict[str, str]:
     config_file = os.path.join(pi_trading_lib.get_package_dir(), 'config/data_sources.csv')
 
     data_sources = {}
@@ -20,12 +21,12 @@ def _get_data_sources() -> Dict[str, str]:
     return data_sources
 
 
-def get_data_file(name: str, date: Optional[str] = None) -> str:
+def get_data_file(name: str, date: t.Optional[datetime.date] = None) -> str:
     data_sources = _get_data_sources()
     location = data_sources[name]
 
-    if "{date}" in location:
+    if '{date}' in location:
         assert date is not None
-        location = location.format(date=date)
+        location = location.format(date=date.strftime("%Y%m%d"))
 
     return location
