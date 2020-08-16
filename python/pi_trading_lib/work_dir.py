@@ -24,7 +24,6 @@ class WorkDir:
         if self.cleanup:
             logging.info("Cleaning up work directory %s" % self.root)
             shutil.rmtree(self.root)
-        return True
 
     def md_csv(self, date: datetime.date) -> str:
         return os.path.join(self.root, 'market_data', date.strftime("%Y%m%d") + '.csv')

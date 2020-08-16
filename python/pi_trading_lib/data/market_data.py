@@ -8,18 +8,21 @@ import csv
 import pandas as pd  # type: ignore
 import dateutil.parser
 
-import pi_trading_lib.data.data_sources as data_sources
+from pi_trading_lib.data.data_archive import DataArchive
 import pi_trading_lib.work_dir as work_dir
 import pi_trading_lib.fs as fs
+import pi_trading_lib.dates as dates
 
 
 class MarketData:
-    def __init__(self, work_dir: work_dir.WorkDir):
+    COLUMNS = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 'trade_price', 'name']
+
+    def __init__(self, work_dir: work_dir.WorkDir, data_archive: DataArchive):
         self.work_dir = work_dir
+        self.data_archive = data_archive
 
     def get_raw(self, date: datetime.date) -> t.Optional[t.List[t.Dict]]:
-        # Temp we should just do this in rust
-        market_data_file = data_sources.get_data_file('market_data_raw', date)
+        market_data_file = self.data_archive.get_data_file('market_data_raw', {'date': dates.to_date_str(date)})
         if not os.path.exists(market_data_file):
             logging.warn('No raw market data for {date}'.format(date=str(date)))
             return None
@@ -55,9 +58,8 @@ class MarketData:
         timestamp = datetime.datetime(date.year, date.month, date.day,
                                       hour=23, minute=59, second=59, tzinfo=datetime.timezone.utc)
 
-        columns = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 'trade_price', 'name']
         with fs.safe_open(md_csv, 'w+', newline='') as md_csv_f:
-            writer = csv.DictWriter(md_csv_f, fieldnames=columns)
+            writer = csv.DictWriter(md_csv_f, fieldnames=MarketData.COLUMNS)
             writer.writeheader()
             for market in daily_market_data.values():
                 for contract in market['contracts']:
@@ -70,13 +72,18 @@ class MarketData:
                         'trade_price': contract['trade_price'],
                         'name': market['name'] + ':' + contract['name']
                     }
+                    assert row.keys() == set(MarketData.COLUMNS)
                     writer.writerow(row)
 
         return md_csv
 
-    def get_df(self, start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
+    def get_df(self, start_date: datetime.date, end_date: datetime.date,
+               columns: t.Optional[t.List[str]] = None) -> pd.DataFrame:
         """Get market data dataframe, including start_date and end_date"""
         assert end_date >= start_date
+
+        if columns is None:
+            columns = MarketData.COLUMNS
 
         date_dfs = []
 
