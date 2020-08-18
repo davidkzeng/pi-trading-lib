@@ -1,3 +1,4 @@
+import typing as t
 import datetime
 import os
 import os.path
@@ -5,21 +6,24 @@ import csv
 import logging
 import urllib.request
 import io
+import functools
+import pandas as pd  # type: ignore
 
 import pi_trading_lib
 import pi_trading_lib.dates as dates
 import pi_trading_lib.fs as fs
+import pi_trading_lib.df_utils as df_utils
 from pi_trading_lib.data.data_archive import DataArchive
+
+CONFIG_FILE = os.path.join(pi_trading_lib.get_package_dir(), 'config/fivethirtyeight.csv')
 
 
 class FiveThirtyEightArchiver:
-    CONFIG_FILE = os.path.join(pi_trading_lib.get_package_dir(), 'config/fivethirtyeight.csv')
-
     def __init__(self, data_archive: DataArchive):
         self.data_archive = data_archive
 
     def archive_data(self, date: datetime.date) -> None:
-        with open(FiveThirtyEightArchiver.CONFIG_FILE, 'r') as data_config_f:
+        with open(CONFIG_FILE, 'r') as data_config_f:
             reader = csv.DictReader(data_config_f)
             for row in reader:
                 name = row['name']
@@ -59,5 +63,18 @@ class FiveThirtyEightArchiver:
 
 
 class FiveThirtyEight:
-    def __init__(self):
-        pass
+    def __init__(self, data_archive: DataArchive):
+        self.data_archive = data_archive
+        with open(CONFIG_FILE, 'r') as data_config_f:
+            reader = csv.DictReader(data_config_f)
+            self.data_sources = [row['name'] for row in reader]
+
+    def get_csv(self, name: str, date: datetime.date) -> t.Optional[str]:
+        assert name in self.data_sources
+        data_file = self.data_archive.get_data_file(name, {'date': dates.to_date_str(date)})
+        return data_file
+
+    @functools.lru_cache()
+    def get_df(self, name: str, start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
+        """Get market data dataframe, including start_date and end_date"""
+        return df_utils.df_from_csvs(functools.partial(self.get_csv, name), start_date, end_date)

@@ -4,20 +4,22 @@ import json
 import logging
 import datetime
 import csv
+import functools
 
 import pandas as pd  # type: ignore
 import dateutil.parser
 
 from pi_trading_lib.data.data_archive import DataArchive
-import pi_trading_lib.work_dir as work_dir
+from pi_trading_lib.work_dir import WorkDir
 import pi_trading_lib.fs as fs
 import pi_trading_lib.dates as dates
+import pi_trading_lib.df_utils as df_utils
 
 
 class MarketData:
     COLUMNS = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 'trade_price', 'name']
 
-    def __init__(self, work_dir: work_dir.WorkDir, data_archive: DataArchive):
+    def __init__(self, work_dir: WorkDir, data_archive: DataArchive):
         self.work_dir = work_dir
         self.data_archive = data_archive
 
@@ -77,24 +79,14 @@ class MarketData:
 
         return md_csv
 
+    @functools.lru_cache()
     def get_df(self, start_date: datetime.date, end_date: datetime.date,
-               columns: t.Optional[t.List[str]] = None) -> pd.DataFrame:
+               contracts: t.Optional[t.Tuple[int, ...]] = None) -> pd.DataFrame:
         """Get market data dataframe, including start_date and end_date"""
-        assert end_date >= start_date
 
-        if columns is None:
-            columns = MarketData.COLUMNS
+        df = df_utils.df_from_csvs(self.get_csv, start_date, end_date)
 
-        date_dfs = []
+        if contracts is not None:
+            df = df[df['contract_id'].isin(contracts)]
 
-        num_dates = (end_date - start_date).days + 1
-        for i in range(num_dates):
-            cur_date = start_date + datetime.timedelta(days=i)
-            market_data_csv = self.get_csv(cur_date)
-            if market_data_csv is None:
-                continue
-
-            with open(market_data_csv, 'r') as market_data_csv_f:
-                date_dfs.append(pd.read_csv(market_data_csv_f))
-
-        return pd.concat(date_dfs, axis=0, ignore_index=True)
+        return df
