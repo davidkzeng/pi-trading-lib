@@ -4,24 +4,20 @@ import datetime
 import tempfile
 import shutil
 import logging
+import atexit
 
 
 class WorkDir:
     def __init__(self, root: t.Optional[str] = None):
         if root is None:
             root = tempfile.mkdtemp()
-            self.cleanup = True
-        else:
-            self.cleanup = False
+            atexit.register(self.cleanup)
 
         self.root = root
         logging.info("Using work directory %s" % self.root)
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        if self.cleanup:
+    def cleanup(self):
+        if os.path.exists(self.root):
             logging.info("Cleaning up work directory %s" % self.root)
             shutil.rmtree(self.root)
 

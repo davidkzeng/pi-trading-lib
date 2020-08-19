@@ -10,6 +10,7 @@ pandas = "*"
 flake8 = "*"
 mypy = "*"
 python-dateutil = "*"
+notebook = "*"
 
 [requires]
 python_version = "3.6"

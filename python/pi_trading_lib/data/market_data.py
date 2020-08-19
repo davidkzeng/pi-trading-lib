@@ -79,6 +79,7 @@ class MarketData:
 
         return md_csv
 
+    @utils.copy
     @functools.lru_cache()
     def get_df(self, start_date: datetime.date, end_date: datetime.date,
                contracts: t.Optional[t.Tuple[int, ...]] = None) -> pd.DataFrame:

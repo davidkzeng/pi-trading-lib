@@ -13,6 +13,7 @@ import pi_trading_lib
 import pi_trading_lib.dates as dates
 import pi_trading_lib.fs as fs
 import pi_trading_lib.df_utils as df_utils
+import pi_trading_lib.utils as utils
 from pi_trading_lib.data.data_archive import DataArchive
 
 CONFIG_FILE = os.path.join(pi_trading_lib.get_package_dir(), 'config/fivethirtyeight.csv')
@@ -74,6 +75,7 @@ class FiveThirtyEight:
         data_file = self.data_archive.get_data_file(name, {'date': dates.to_date_str(date)})
         return data_file
 
+    @utils.copy
     @functools.lru_cache()
     def get_df(self, name: str, start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
         """Get market data dataframe, including start_date and end_date"""

@@ -10,3 +10,10 @@ def parent_dir(path, levels=1):
 
 def get_package_dir():
     return parent_dir(os.path.realpath(__file__), 3)
+
+
+def copy(func):
+    def decorated_func(*args, **kwargs):
+        result = func(*args, **kwargs)
+        return result.copy()
+    return decorated_func
