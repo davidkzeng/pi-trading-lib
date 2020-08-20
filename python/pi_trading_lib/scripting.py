@@ -9,6 +9,9 @@ from pi_trading_lib.data.fivethirtyeight import FiveThirtyEight, FiveThirtyEight
 
 import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.states as states
+import pi_trading_lib.logging as logging
+
+logging.init_logging()
 
 work_dir = WorkDir()
 data_archive = DataArchive()
