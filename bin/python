@@ -1,8 +1,4 @@
 #!/bin/bash
 
 package_dir=$(dirname $(dirname $(realpath "$0")))
-
-export PYTHONPATH=$package_dir/python:$PYTHONPATH
-export PIPENV_PIPFILE=$package_dir/python/Pipfile
-
-pipenv run python "$@"
+$package_dir/bin/pyenv python "$@"

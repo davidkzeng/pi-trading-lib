@@ -14,6 +14,7 @@ from pi_trading_lib.work_dir import WorkDir
 import pi_trading_lib.fs as fs
 import pi_trading_lib.dates as dates
 import pi_trading_lib.df_utils as df_utils
+import pi_trading_lib.utils as utils
 
 
 class MarketData:
@@ -90,4 +91,27 @@ class MarketData:
         if contracts is not None:
             df = df[df['contract_id'].isin(contracts)]
 
+        return df
+
+    @staticmethod
+    def add_market_best_price(df: pd.DataFrame):
+        bid_ask_by_market = df.groupby('market_id')[['bid_price', 'ask_price']].sum()
+
+        def get_best_bid(row):
+            """
+            An order to buy contract A at bid_price is the equivalent to an order to sell
+            the complementary contract B as ask_price = 1 - bid_price
+            From our POV: selling contract A at bid_price (buying NO's) is the same as
+            buying contract B at ask_price (buying YES's)
+
+            """
+            opp_side_bid = 1 - (bid_ask_by_market.at[row['market_id'], 'ask_price'] - row['ask_price'])
+            return max(row['bid_price'], opp_side_bid)
+
+        def get_best_ask(row):
+            opp_side_ask = 1 - (bid_ask_by_market.at[row['market_id'], 'bid_price'] - row['bid_price'])
+            return min(row['ask_price'], opp_side_ask)
+
+        df['best_bid_price'] = df.apply(lambda row: get_best_bid(row), axis=1)
+        df['best_ask_price'] = df.apply(lambda row: get_best_ask(row), axis=1)
         return df

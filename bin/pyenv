@@ -1,0 +1,10 @@
+#!/bin/bash
+
+package_dir=$(dirname $(dirname $(realpath "$0")))
+
+export PYTHONPATH=$package_dir/python:$PYTHONPATH
+
+venv_file=$(cd $package_dir/python && poetry env info -p)
+source $venv_file/bin/activate
+
+"$@"

@@ -53,3 +53,13 @@ NAME_TO_ABBRV = {
 }
 
 ABBRV_TO_NAME = {val: key for key, val in NAME_TO_ABBRV.items()}
+
+EC_SPECIAL_DISTRICTS = ['ME-1', 'ME-2', 'NE-1', 'NE-2', 'NE-3']
+
+
+def get_state_abbrv_pres(state_name):
+    if state_name in NAME_TO_ABBRV:
+        return NAME_TO_ABBRV[state_name]
+    if state_name in EC_SPECIAL_DISTRICTS:
+        return state_name
+    return None

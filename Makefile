@@ -2,8 +2,8 @@ all: rust python
 release: rust-release
 
 python:
-	cd python/ && pipenv run flake8 --config .flake8
-	cd python/ && pipenv run mypy -p pi_trading_lib
+	bin/pyenv flake8 --config python/.flake8
+	bin/pyenv mypy python/pi_trading_lib
 
 rust:
 	cargo build --manifest-path=rust/Cargo.toml

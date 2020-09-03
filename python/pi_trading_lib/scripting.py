@@ -1,6 +1,7 @@
 # flake8: noqa
 
 from datetime import date, datetime, timedelta
+from logging import WARN
 
 from pi_trading_lib.work_dir import WorkDir
 from pi_trading_lib.data.data_archive import DataArchive
@@ -11,7 +12,7 @@ import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.states as states
 import pi_trading_lib.logging as logging
 
-logging.init_logging()
+logging.init_logging(WARN)
 
 work_dir = WorkDir()
 data_archive = DataArchive()
