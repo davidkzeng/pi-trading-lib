@@ -1,5 +1,5 @@
 all: rust python
-release: rust-release
+release: rust-release python-release
 
 python:
 	bin/pyenv flake8 --config python/.flake8
@@ -11,4 +11,7 @@ rust:
 rust-release:
 	cargo build --release --manifest-path=rust/Cargo.toml
 
-.PHONY: all python rust rust-release
+python-release:
+	cd python/ && poetry build
+
+.PHONY: all python rust rust-release python-release
