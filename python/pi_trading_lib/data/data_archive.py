@@ -7,11 +7,7 @@ import pi_trading_lib
 
 
 class DataArchive:
-    DEFAULT_ARCHIVE_DIR = os.path.join(pi_trading_lib.get_package_dir(), 'data')
-
-    def __init__(self, archive_dir: t.Optional[str] = None):
-        if archive_dir is None:
-            archive_dir = DataArchive.DEFAULT_ARCHIVE_DIR
+    def __init__(self, archive_dir: str):
         self.archive_dir = archive_dir
 
     @functools.lru_cache()

@@ -6,7 +6,7 @@ from logging import WARN
 from pi_trading_lib.work_dir import WorkDir
 from pi_trading_lib.data.data_archive import DataArchive
 from pi_trading_lib.data.market_data import MarketData
-from pi_trading_lib.data.fivethirtyeight import FiveThirtyEight, FiveThirtyEightArchiver
+from pi_trading_lib.data.fivethirtyeight import FiveThirtyEight
 
 import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.states as states
@@ -14,9 +14,5 @@ import pi_trading_lib.logging as logging
 
 logging.init_logging(WARN)
 
-work_dir = WorkDir()
-data_archive = DataArchive()
-market_data = MarketData(work_dir, data_archive)
-fte = FiveThirtyEight(data_archive)
-
+# Useful constants
 yesterday = (datetime.now() - timedelta(days=1)).date()

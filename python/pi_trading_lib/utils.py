@@ -9,7 +9,8 @@ def parent_dir(path, levels=1):
 
 
 def get_package_dir():
-    return parent_dir(os.path.realpath(__file__), 3)
+    """Return directory of python package"""
+    return parent_dir(os.path.realpath(__file__), 2)
 
 
 def copy(func):

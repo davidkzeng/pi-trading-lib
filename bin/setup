@@ -1,6 +1,13 @@
 #!/bin/bash
 
-# Requires poetry
+# Optional poetry based installation
+
+if ! command -v pip3; then
+    echo "Requires pip3 to be installed"
+    exit 1
+fi
+
 package_dir=$(dirname $(dirname $(realpath "$0")))
 cd $package_dir/python
+pip3 install --user poetry
 poetry install
