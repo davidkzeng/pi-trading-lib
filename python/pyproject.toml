@@ -9,6 +9,7 @@ include=["pi_trading_lib/py.typed", "config/**/*"]
 python = "^3.7"
 pandas = "^1"
 python-dateutil = "^2.8.1"
+scipy = "^1.5.2"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.782"
