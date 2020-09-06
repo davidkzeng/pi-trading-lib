@@ -24,10 +24,20 @@ def get_contract_data(name: str) -> t.Dict[int, t.Dict[int, t.List]]:
     assert os.path.exists(contract_file)
 
     with fs.safe_open(contract_file, 'r') as contract_f:
-        return json.load(contract_f)
+        contract_info = json.load(contract_f)
+        contract_info = {int(mid): {int(cid): info for cid, info in mid_info.items()}
+                         for mid, mid_info in contract_info.items()}
+        return contract_info
 
 
-@functools.lru_cache()
-def get_contract_ids(name: str) -> t.List[int]:
+def get_contract_data_by_cid(name: str) -> t.Dict[int, t.List]:
     contract_data = get_contract_data(name)
-    return [cid for mid in contract_data for cid in contract_data[mid]]
+    flattened_data = [(cid, contract_data[mid][cid]) for mid in contract_data for cid in contract_data[mid]]
+    contract_data_by_cid = {cid: info for cid, info in flattened_data}
+
+    assert len(flattened_data) == len(contract_data_by_cid)
+    return contract_data_by_cid
+
+
+def get_contract_ids(name: str) -> t.List[int]:
+    return list(get_contract_data_by_cid(name).keys())

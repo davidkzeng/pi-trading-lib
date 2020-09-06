@@ -6,7 +6,7 @@ import datetime
 import csv
 import functools
 
-import pandas as pd  # type: ignore
+import pandas as pd
 import dateutil.parser
 
 from pi_trading_lib.data.data_archive import DataArchive
