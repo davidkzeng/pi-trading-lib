@@ -11,6 +11,7 @@ from pi_trading_lib.data.fivethirtyeight import FiveThirtyEight
 import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.states as states
 import pi_trading_lib.logging as logging
+import pi_trading_lib.optimizer as optimizer
 
 logging.init_logging(WARN)
 
