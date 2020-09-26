@@ -17,3 +17,4 @@ logging.init_logging(WARN)
 
 # Useful constants
 yesterday = (datetime.now() - timedelta(days=1)).date()
+today = datetime.now().date()

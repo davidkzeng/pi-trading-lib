@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::{thread, time};
 
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
@@ -84,6 +85,8 @@ impl MarketDataSource for MarketDataLive {
                         break Err(err);
                     }
                     println!("Encountered market data error {:?}", err);
+                    println!("Sleeping for 1 second");
+                    thread::sleep(time::Duration::from_millis(1000));
                 }
             }
         }

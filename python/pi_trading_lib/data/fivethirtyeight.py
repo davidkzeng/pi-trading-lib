@@ -12,7 +12,6 @@ import pandas as pd  # type: ignore
 import pi_trading_lib
 import pi_trading_lib.dates as dates
 import pi_trading_lib.fs as fs
-import pi_trading_lib.df_utils as df_utils
 import pi_trading_lib.utils as utils
 import pi_trading_lib.states as states
 from pi_trading_lib.data.data_archive import DataArchive
@@ -85,7 +84,7 @@ class FiveThirtyEight:
     @functools.lru_cache()
     def get_df(self, name: str, start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
         """Get market data dataframe, including start_date and end_date"""
-        base_df = df_utils.df_from_csvs(functools.partial(self.get_csv, name), start_date, end_date)
+        base_df = pd.concat([self.get_csv(name, date) for date in dates.date_range(start_date, end_date)], axis=0)
 
         if name == 'pres_state_2020':
             base_df = self._process_pres_state_2020(base_df)
