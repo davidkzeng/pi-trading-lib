@@ -1,7 +1,7 @@
 import argparse
 
-from pi_trading_lib.data.data_archive import DataArchive
-from pi_trading_lib.data.fivethirtyeight import FiveThirtyEightArchiver
+import pi_trading_lib.data.data_archive as data_archive
+import pi_trading_lib.data.fivethirtyeight as fte
 import pi_trading_lib.dates
 import pi_trading_lib.logging
 
@@ -13,7 +13,6 @@ if __name__ == '__main__':
 
     pi_trading_lib.logging.init_logging()
     date = pi_trading_lib.dates.from_date_str(args.date)
-    archive = DataArchive(args.archive_location)
-    fivethirtyeight_archiver = FiveThirtyEightArchiver(archive)
+    data_archive.set_archive_dir(args.archive_location)
 
-    fivethirtyeight_archiver.archive_data(date)
+    fte.archive_data(date)

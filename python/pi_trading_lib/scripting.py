@@ -4,9 +4,9 @@ from datetime import date, datetime, timedelta
 from logging import WARN
 
 from pi_trading_lib.work_dir import WorkDir
-from pi_trading_lib.data.data_archive import DataArchive
-from pi_trading_lib.data.market_data import MarketData
-from pi_trading_lib.data.fivethirtyeight import FiveThirtyEight
+import pi_trading_lib.data.data_archive as data_archive
+import pi_trading_lib.data.market_data as market_data
+import pi_trading_lib.data.fivethirtyeight as fte
 
 import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.states as states
