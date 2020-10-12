@@ -27,32 +27,33 @@ def archive_data(date: datetime.date) -> None:
             name = row['name']
             start_date, end_date = row['start_date'], row['end_date']
             location = row['location']
+            date_col, date_format = row['date_col'], row['date_format']
 
             if (
                     (start_date and date < dates.from_date_str(start_date)) or
                     (end_date and date > dates.from_date_str(end_date))
                ):
                 logging.info("Out of date range, ignoring data source {name}".format(name=name))
-                break
+                continue
 
             save_location = data_archive.get_data_file(name, {'date': dates.to_date_str(date)})
             if os.path.exists(save_location):
-                break
+                logging.info(f"Data already exists: {save_location}")
+                continue
 
             with urllib.request.urlopen(location) as f:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
 
                 assert reader.fieldnames is not None
-                assert 'modeldate' in reader.fieldnames
+                assert date_col in reader.fieldnames
 
                 rows_written = 0
                 with fs.safe_open(save_location, 'w+', newline='') as save_f:
                     writer = csv.DictWriter(save_f, fieldnames=reader.fieldnames)
                     writer.writeheader()
-                    # Currently true for all 538 data
                     for row in reader:
                         # 538 file may contain rows for previous dates
-                        model_date = datetime.datetime.strptime(row['modeldate'], '%m/%d/%Y').date()
+                        model_date = datetime.datetime.strptime(row[date_col], date_format).date()
                         if model_date == date:
                             writer.writerow(row)
                             rows_written += 1
