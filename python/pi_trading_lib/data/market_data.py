@@ -95,17 +95,6 @@ def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ..
     return df
 
 
-def get_df(start_date: datetime.date, end_date: datetime.date, **filter_kwargs) -> pd.DataFrame:
-    """Get market data between [start_date, end_date], inclusive"""
-    # TODO: Support intraday snapshots
-    df = pd.concat(
-        [get_filtered_data(date, **filter_kwargs) for date in dates.date_range(start_date, end_date)],
-        axis=0
-    )
-
-    return df
-
-
 def add_market_best_price(df: pd.DataFrame):
     bid_ask_by_market = df.groupby('market_id')[['bid_price', 'ask_price']].sum()
 
@@ -126,4 +115,15 @@ def add_market_best_price(df: pd.DataFrame):
 
     df['best_bid_price'] = df.apply(lambda row: get_best_bid(row), axis=1)
     df['best_ask_price'] = df.apply(lambda row: get_best_ask(row), axis=1)
+    return df
+
+
+def get_df(start_date: datetime.date, end_date: datetime.date, **filter_kwargs) -> pd.DataFrame:
+    """Get market data between [start_date, end_date], inclusive"""
+    # TODO: Support intraday snapshots
+    df = pd.concat(
+        [get_filtered_data(date, **filter_kwargs) for date in dates.date_range(start_date, end_date)],
+        axis=0
+    )
+    df = add_market_best_price(df)
     return df

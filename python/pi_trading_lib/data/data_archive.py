@@ -6,18 +6,22 @@ import os.path
 import pi_trading_lib
 
 
-archive_dir = None
+_archive_dir = None
 
 
 def set_archive_dir(loc: str):
-    global archive_dir
-    archive_dir = loc
+    global _archive_dir
+    _archive_dir = loc
+
+
+def get_archive_dir():
+    assert _archive_dir is not None, "data archive not initialized"
+
+    return _archive_dir
 
 
 @functools.lru_cache()
 def _get_data_archives() -> t.Dict[str, str]:
-    assert archive_dir is not None, "data archive not initialized"
-
     config_file = os.path.join(pi_trading_lib.get_package_dir(), 'config/data_archive.csv')
 
     data_archives = {}
@@ -25,7 +29,7 @@ def _get_data_archives() -> t.Dict[str, str]:
         reader = csv.DictReader(data_config_f)
         for row in reader:
             archive_name = row['name']
-            archive_location = os.path.join(archive_dir, row['location'])
+            archive_location = os.path.join(get_archive_dir(), row['location'])
             data_archives[archive_name] = archive_location
     return data_archives
 

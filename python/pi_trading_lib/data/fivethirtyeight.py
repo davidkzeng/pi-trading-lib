@@ -84,7 +84,7 @@ def _process_pres_state_2020(df: pd.DataFrame) -> pd.DataFrame:
 @functools.lru_cache()
 def get_df(name: str, start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
     """Get market data dataframe, including start_date and end_date"""
-    base_df = pd.concat([get_csv(name, date) for date in dates.date_range(start_date, end_date)], axis=0)
+    base_df = pd.concat([pd.read_csv(get_csv(name, date)) for date in dates.date_range(start_date, end_date)], axis=0)
 
     if name == 'pres_state_2020':
         base_df = _process_pres_state_2020(base_df)
