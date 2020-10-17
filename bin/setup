@@ -2,16 +2,17 @@
 
 set -e
 
-# Optional poetry based installation
+command -v python3; has_python3=$?
+command -v pip3; has_pip3=$?
 
-if ! command -v pip3; then
-    echo "Requires pip3 to be installed"
+if (( $has_python3 || $has_pip3 )); then
+    echo "Install requirements: python3, pip3"
     exit 1
 fi
 
 package_dir=$(dirname $(dirname $(realpath "$0")))
-cd $package_dir/python
-pip3 install --user poetry
-poetry install
+cd $package_dir/python/dist
+pip3 uninstall --yes pi-trading-lib
+pip3 install --user pi_trading_lib-0.1.0-py3-none-any.whl
 
-echo "Successful install"
+echo "Installed pi-trading-lib python"

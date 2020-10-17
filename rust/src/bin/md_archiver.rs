@@ -51,8 +51,7 @@ fn main() {
                 output_file.write_all("\n".as_bytes()).expect("Unable to write new line");
             },
             Err(err) => {
-                println!("Market data error {:?}, exiting loop", err);
-                break loop_start_time;
+                println!("Unable to fetch market data: {:?}", err);
             }
         }
 
