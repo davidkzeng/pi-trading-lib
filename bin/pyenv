@@ -3,10 +3,8 @@ set -e
 
 package_dir=$(dirname $(dirname $(realpath "$0")))
 
-export PYTHONPATH=$package_dir/python:$PYTHONPATH
-
-venv_file=$(cd $package_dir/python && poetry env info -p)
-[[ -d "$venv_file" ]]
-source $venv_file/bin/activate
+venv=$(cd $package_dir/python && poetry env info -p)
+[[ -d "$venv" ]]
+source $venv/bin/activate
 
 "$@"
