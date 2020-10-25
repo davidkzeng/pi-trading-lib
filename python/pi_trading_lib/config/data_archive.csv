@@ -1,7 +1,8 @@
 name,location
 market_data_raw,market_data_raw/{date}.json
-pres_national_2020,fivethirtyeight/pres_national_2020/{date}.json
-pres_state_2020,fivethirtyeight/pres_state_2020/{date}.json
-pres_ev_2020,fivethirtyeight/pres_ev_2020/{date}.json
-senate_national_2020,fivethirtyeight/senate_national_2020/{date}.json
-senate_state_2020,fivethirtyeight/senate_state_2020/{date}.json
+pres_national_2020,fivethirtyeight/pres_national_2020/{date}.csv
+pres_state_2020,fivethirtyeight/pres_state_2020/{date}.csv
+pres_ev_2020,fivethirtyeight/pres_ev_2020/{date}.csv
+senate_national_2020,fivethirtyeight/senate_national_2020/{date}.csv
+senate_state_2020,fivethirtyeight/senate_state_2020/{date}.csv
+pres_sim_2020,fivethirtyeight/pres_sim_2020/{date}.csv

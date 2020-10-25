@@ -7,6 +7,7 @@ import logging
 import urllib.request
 import io
 import functools
+import json
 import pandas as pd  # type: ignore
 
 import pi_trading_lib
@@ -19,6 +20,41 @@ import pi_trading_lib.data.data_archive as data_archive
 CONFIG_FILE = os.path.join(pi_trading_lib.get_package_dir(), 'config/fivethirtyeight.csv')
 
 
+def archive_csv(location, save_location, date_col, date_format, date, name) -> None:
+    with urllib.request.urlopen(location) as f:
+        reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
+
+        assert reader.fieldnames is not None
+        assert date_col in reader.fieldnames
+
+        rows_written = 0
+        with fs.safe_open(save_location, 'w+', newline='') as save_f:
+            writer = csv.DictWriter(save_f, fieldnames=reader.fieldnames)
+            writer.writeheader()
+            for row in reader:
+                # 538 file may contain rows for previous dates
+                model_date = datetime.datetime.strptime(row[date_col], date_format).date()
+                if model_date == date:
+                    writer.writerow(row)
+                    rows_written += 1
+        if rows_written == 0:
+            logging.warn("No rows found for {name} for {date}".format(name=name, date=date))
+
+
+def archive_sim_2020_json(location, save_location) -> None:
+    with urllib.request.urlopen(location) as f:
+        sim_data = json.load(io.TextIOWrapper(f, encoding='utf-8'))
+        states = sim_data['states']
+        maps = sim_data['maps']
+        columns = ['winner', 'trump_ev', 'biden_ev'] + states
+
+        with fs.safe_open(save_location, 'w+', newline='') as save_f:
+            writer = csv.writer(save_f)
+            writer.writerow(columns)
+            for map_data in maps:
+                writer.writerow(map_data)
+
+
 # Archiving
 def archive_data(date: datetime.date) -> None:
     with open(CONFIG_FILE, 'r') as data_config_f:
@@ -27,7 +63,6 @@ def archive_data(date: datetime.date) -> None:
             name = row['name']
             start_date, end_date = row['start_date'], row['end_date']
             location = row['location']
-            date_col, date_format = row['date_col'], row['date_format']
 
             if (
                     (start_date and date < dates.from_date_str(start_date)) or
@@ -41,24 +76,13 @@ def archive_data(date: datetime.date) -> None:
                 logging.info(f"Data already exists: {save_location}")
                 continue
 
-            with urllib.request.urlopen(location) as f:
-                reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
-
-                assert reader.fieldnames is not None
-                assert date_col in reader.fieldnames
-
-                rows_written = 0
-                with fs.safe_open(save_location, 'w+', newline='') as save_f:
-                    writer = csv.DictWriter(save_f, fieldnames=reader.fieldnames)
-                    writer.writeheader()
-                    for row in reader:
-                        # 538 file may contain rows for previous dates
-                        model_date = datetime.datetime.strptime(row[date_col], date_format).date()
-                        if model_date == date:
-                            writer.writerow(row)
-                            rows_written += 1
-                if rows_written == 0:
-                    logging.warn("No rows found for {name} for {date}".format(name=name, date=date))
+            if location.endswith('.csv'):
+                date_col, date_format = row['date_col'], row['date_format']
+                archive_csv(location, save_location, date_col, date_format, date, name)
+            elif name == 'pres_sim_2020':
+                archive_sim_2020_json(location, save_location)
+            else:
+                assert False, f"Archiving logic not implemented for {name}"
 
 
 # Reading

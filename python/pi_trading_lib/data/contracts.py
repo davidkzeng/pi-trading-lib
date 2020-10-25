@@ -31,6 +31,9 @@ def get_contract_data(name: str) -> t.Dict[int, t.Dict[int, t.List]]:
 
 
 def get_contract_data_by_cid(name: str) -> t.Dict[int, t.List]:
+    """
+    returns: contract id -> [contract info]
+    """
     contract_data = get_contract_data(name)
     flattened_data = [(cid, contract_data[mid][cid]) for mid in contract_data for cid in contract_data[mid]]
     contract_data_by_cid = {cid: info for cid, info in flattened_data}

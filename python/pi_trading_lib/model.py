@@ -4,14 +4,18 @@ from abc import abstractmethod
 
 import pandas as pd
 
-OptimizeResult = t.Tuple[pd.DataFrame, t.Tuple[float, float]]
+Position = pd.DataFrame
+Capital = float
+Return = t.Tuple[float, float]
+OptimizeResult = t.Tuple[Position, Capital, Return]
 
 POSITION_LIMIT_VALUE = 800
 
 
 class BaseModel:
     @abstractmethod
-    def optimize(self, date: datetime.date, capital: float, params: t.Dict[str, t.Any] = {}) -> OptimizeResult:
+    def optimize(self, date: datetime.date, capital: float, cur_position: pd.DataFrame,
+                 params: t.Dict[str, t.Any] = {}) -> OptimizeResult:
         pass
 
     @staticmethod
