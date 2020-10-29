@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+#!/bin/bash
+"exec" "$(dirname $0)/pyenv" "python" "$0" "$@"
 
 import pi_trading_lib.scripts.archiver as archiver
 
