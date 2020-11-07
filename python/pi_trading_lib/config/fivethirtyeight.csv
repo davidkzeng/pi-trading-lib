@@ -1,7 +1,7 @@
 name,start_date,end_date,location,date_col,date_format
-pres_national_2020,20200815,,https://projects.fivethirtyeight.com/2020-general-data/presidential_national_toplines_2020.csv,modeldate,%m/%d/%Y
-pres_state_2020,20200815,,https://projects.fivethirtyeight.com/2020-general-data/presidential_state_toplines_2020.csv,modeldate,%m/%d/%Y
-pres_ev_2020,20200815,,https://projects.fivethirtyeight.com/2020-general-data/presidential_ev_probabilities_2020.csv,modeldate,%m/%d/%Y
-senate_national_2020,20200915,,https://projects.fivethirtyeight.com/2020-general-data/senate_national_toplines_2020.csv,forecastdate,%m/%d/%y
-senate_state_2020,20200915,,https://projects.fivethirtyeight.com/2020-general-data/senate_state_toplines_2020.csv,forecastdate,%m/%d/%y
-pres_sim_2020,20201025,,https://projects.fivethirtyeight.com/trump-biden-election-map/simmed-maps.json,,,
+pres_national_2020,20200815,20201102,https://projects.fivethirtyeight.com/2020-general-data/presidential_national_toplines_2020.csv,modeldate,%m/%d/%Y
+pres_state_2020,20200815,20201102,https://projects.fivethirtyeight.com/2020-general-data/presidential_state_toplines_2020.csv,modeldate,%m/%d/%Y
+pres_ev_2020,20200815,20201102,https://projects.fivethirtyeight.com/2020-general-data/presidential_ev_probabilities_2020.csv,modeldate,%m/%d/%Y
+senate_national_2020,20200915,20201102,https://projects.fivethirtyeight.com/2020-general-data/senate_national_toplines_2020.csv,forecastdate,%m/%d/%y
+senate_state_2020,20200915,20201102,https://projects.fivethirtyeight.com/2020-general-data/senate_state_toplines_2020.csv,forecastdate,%m/%d/%y
+pres_sim_2020,20201025,20201102,https://projects.fivethirtyeight.com/trump-biden-election-map/simmed-maps.json,,,

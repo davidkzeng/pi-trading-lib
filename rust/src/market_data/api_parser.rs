@@ -163,7 +163,9 @@ fn get_utc_timestamp(timestamp_str: &str) -> Result<DateTime<Utc>, MarketDataErr
 
 pub fn fetch_api_market_data() -> MarketDataResult {
     let api_address = API_ADDRESS;
-    let resp = ureq::get(&api_address).call();
+    let resp = ureq::get(&api_address)
+        .timeout_connect(5000) // wait up to 5 seconds
+        .call();
 
     let mut all_market_data_map = HashMap::new();
 
