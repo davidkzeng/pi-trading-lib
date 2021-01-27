@@ -12,6 +12,7 @@ import pi_trading_lib.data.data_archive as data_archive
 import pi_trading_lib.dates as dates
 import pi_trading_lib.utils as utils
 
+# TODO: Store market data in contract based format to optimize for common use cases
 
 COLUMNS = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 'trade_price', 'name']
 
@@ -21,7 +22,7 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
     market_data_file = data_archive.get_data_file('market_data_raw', {'date': dates.to_date_str(date)})
     if not os.path.exists(market_data_file):
         logging.warn('No raw market data for {date}'.format(date=str(date)))
-        return None
+        return pd.DataFrame([], columns=COLUMNS)
 
     market_updates, contract_updates = [], []
 
@@ -54,15 +55,20 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
 @utils.copy
 @functools.lru_cache()
 def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ...]] = None,
+                      markets: t.Optional[t.Tuple[int, ...]] = None,
                       snapshot_interval: t.Optional[datetime.timedelta] = None) -> pd.DataFrame:
     """
     Get data for date as dataframe, applying filters
 
     param snapshot_interval: Transform dataframe into a market data snapshot every snapshot_interval time
     """
+    assert contracts is None or markets is None, "Cannot specify both contracts and markets"
+
     df = get_raw_data(date)
     if contracts is not None:
         df = df.iloc[df.index.get_level_values('contract_id').isin(contracts)]
+    if markets is not None:
+        df = df[df['market_id'].isin(markets)]
 
     if snapshot_interval is not None:
         assert snapshot_interval <= datetime.timedelta(days=1)
@@ -97,6 +103,7 @@ def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ..
 
 def add_market_best_price(df: pd.DataFrame):
     bid_ask_by_market = df.groupby('market_id')[['bid_price', 'ask_price']].sum()
+    contracts_in_market = df.reset_index(drop=False).groupby('market_id')['contract_id'].nunique()
 
     def get_best_bid(row):
         """
@@ -105,16 +112,31 @@ def add_market_best_price(df: pd.DataFrame):
         From our POV: selling contract A at bid_price (buying NO's) is the same as
         buying contract B at ask_price (buying YES's)
 
+        Currently only supporting binary contracts
+
         """
-        opp_side_bid = 1 - (bid_ask_by_market.at[row['market_id'], 'ask_price'] - row['ask_price'])
-        return max(row['bid_price'], opp_side_bid)
+        if contracts_in_market[row['market_id']] == 2:
+            opp_side_bid = 1 - (bid_ask_by_market.at[row['market_id'], 'ask_price'] - row['ask_price'])
+            return max(row['bid_price'], opp_side_bid)
+        else:
+            return row['bid_price']
 
     def get_best_ask(row):
-        opp_side_ask = 1 - (bid_ask_by_market.at[row['market_id'], 'bid_price'] - row['bid_price'])
-        return min(row['ask_price'], opp_side_ask)
+        if contracts_in_market[row['market_id']] == 2:
+            opp_side_ask = 1 - (bid_ask_by_market.at[row['market_id'], 'bid_price'] - row['bid_price'])
+            return min(row['ask_price'], opp_side_ask)
+        else:
+            return row['ask_price']
 
-    df['best_bid_price'] = df.apply(lambda row: get_best_bid(row), axis=1)
-    df['best_ask_price'] = df.apply(lambda row: get_best_ask(row), axis=1)
+    df['best_bid_price'] = df.apply(lambda row: get_best_bid(row), axis=1, result_type='reduce')
+    df['best_ask_price'] = df.apply(lambda row: get_best_ask(row), axis=1, result_type='reduce')
+    return df
+
+
+def add_mid_price(df: pd.DataFrame):
+    df['mid_price'] = (df['best_bid_price'] + df['best_ask_price']) / 2
+    df['mid_price_strict'] = (df['bid_price'] + df['ask_price']) / 2
+
     return df
 
 
@@ -126,4 +148,5 @@ def get_df(start_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
         axis=0
     )
     df = add_market_best_price(df)
+    df = add_mid_price(df)
     return df

@@ -1,12 +1,12 @@
 import typing as t
 import csv
 import functools
-import os.path
+import os
 
 import pi_trading_lib
 
-
-_archive_dir = None
+# reads from environment for easier interactive workflows
+_archive_dir = os.environ.get('PI_DATA_ARCHIVE')
 
 
 def set_archive_dir(loc: str):

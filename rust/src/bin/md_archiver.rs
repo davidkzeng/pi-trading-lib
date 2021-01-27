@@ -30,7 +30,7 @@ fn main() {
     let mut data_state = PIDataState::new();
     let mut output_file = File::create(output_file_name).expect("Unable to create output file");
     let mut loop_counter = 0;
-    
+
     let mut api_market_data = MarketDataLive::new_with_retry(API_RETRY_LIMIT);
 
     println!("Starting market data reading");
