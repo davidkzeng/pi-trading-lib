@@ -37,7 +37,7 @@ def meta_optimize(optimize_fn: t.Callable[[t.Dict[str, t.Any]], OptimizeResult],
             best_score = score
             best_param = param_option
 
-    assert best_result is not None
+    assert best_result is not None and best_param is not None
     return best_result, best_param
 
 

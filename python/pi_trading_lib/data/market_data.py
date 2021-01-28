@@ -22,31 +22,32 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
     market_data_file = data_archive.get_data_file('market_data_raw', {'date': dates.to_date_str(date)})
     if not os.path.exists(market_data_file):
         logging.warn('No raw market data for {date}'.format(date=str(date)))
-        return pd.DataFrame([], columns=COLUMNS)
+        md_df = pd.DataFrame([], columns=COLUMNS)
+    else:
+        market_updates, contract_updates = [], []
 
-    market_updates, contract_updates = [], []
+        logging.info('Loading raw market data file %s' % market_data_file)
+        with open(market_data_file, 'r') as market_data_f:
+            for line in market_data_f:
+                line = line.rstrip()
+                updates = json.loads(line)['market_updates']  # Map from market_id -> market_info
+                market_updates.extend(updates.values())
 
-    logging.info('Loading raw market data file %s' % market_data_file)
-    with open(market_data_file, 'r') as market_data_f:
-        for line in market_data_f:
-            line = line.rstrip()
-            updates = json.loads(line)['market_updates']  # Map from market_id -> market_info
-            market_updates.extend(updates.values())
+        for market_update in market_updates:
+            market_update['timestamp'] = dateutil.parser.isoparse(market_update['timestamp'])
+            for contract_update in market_update['contracts']:
+                contract_updates.append({
+                    'timestamp': market_update['timestamp'],
+                    'market_id': market_update['id'],
+                    'contract_id': contract_update['id'],
+                    'bid_price': contract_update['bid_price'],
+                    'ask_price': contract_update['ask_price'],
+                    'trade_price': contract_update['trade_price'],
+                    'name': market_update['name'] + ':' + contract_update['name']
+                })
 
-    for market_update in market_updates:
-        market_update['timestamp'] = dateutil.parser.isoparse(market_update['timestamp'])
-        for contract_update in market_update['contracts']:
-            contract_updates.append({
-                'timestamp': market_update['timestamp'],
-                'market_id': market_update['id'],
-                'contract_id': contract_update['id'],
-                'bid_price': contract_update['bid_price'],
-                'ask_price': contract_update['ask_price'],
-                'trade_price': contract_update['trade_price'],
-                'name': market_update['name'] + ':' + contract_update['name']
-            })
+        md_df = pd.DataFrame(contract_updates)
 
-    md_df = pd.DataFrame(contract_updates)
     md_df = md_df.set_index(['timestamp', 'contract_id'])
     md_df = md_df.sort_index(level='timestamp')
     return md_df
@@ -63,7 +64,8 @@ def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ..
     param snapshot_interval: Transform dataframe into a market data snapshot every snapshot_interval time
     """
     assert contracts is None or markets is None, "Cannot specify both contracts and markets"
-
+    
+    # Add support for both cids and mids
     df = get_raw_data(date)
     if contracts is not None:
         df = df.iloc[df.index.get_level_values('contract_id').isin(contracts)]

@@ -4,10 +4,10 @@ from abc import abstractmethod
 
 import pandas as pd
 
-Position = pd.DataFrame
+# Can we type alias pd.DataFrame?
 Capital = float
 Return = t.Tuple[float, float]
-OptimizeResult = t.Tuple[Position, Capital, Return]
+OptimizeResult = t.Tuple[pd.DataFrame, Capital, Return]
 
 POSITION_LIMIT_VALUE = 800
 

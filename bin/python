@@ -1,0 +1,4 @@
+#!/bin/bash
+
+bin=$(dirname "$0")
+$bin/pyenv python "$@"

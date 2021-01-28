@@ -4,21 +4,30 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
 import pi_trading_lib.data.market_data as market_data
+import pi_trading_lib.data.data_archive as data_archive
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('start_date')
     parser.add_argument('end_date')
-    parser.add_argument('mids', nargs='+')
+    parser.add_argument('--mids', nargs='*')
+    parser.add_argument('--cids', nargs='*')
     parser.add_argument('--interactive', action='store_true')
     parser.add_argument('--bid-ask', action='store_true')
+    parser.add_argument('--data-archive')
+
     args = parser.parse_args()
 
-    mids = tuple(int(mid) for mid in args.mids)
+    if args.data_archive:
+        data_archive.set_archive_dir(args.data_archive)
+
+    mids = tuple(int(mid) for mid in args.mids) if args.mids is not None else None
+    cids = tuple(int(cid) for cid in args.cids) if args.cids is not None else None
+
     start_date = datetime.datetime.strptime(args.start_date, '%Y%m%d').date()
     end_date = datetime.datetime.strptime(args.end_date, '%Y%m%d').date()
-    data = market_data.get_df(start_date, end_date, markets=mids)
+    data = market_data.get_df(start_date, end_date, markets=mids, contracts=cids)
 
     if args.bid_ask:
         plot_df = data[['bid_price', 'ask_price']]
