@@ -7,27 +7,28 @@ import pandas as pd
 from pi_trading_lib.constants import NANOS_IN_SECOND
 from pi_trading_lib.data.market_data import DataFrameProvider
 from pi_trading_lib.simulation.md_sim import MarketDataSim
-from pi_trading_lib.simulation.components import EMA, EMA_ALPHA
+from pi_trading_lib.simulation.components import SimNode, EMA, EMA_ALPHA, Return
+
+R = t.TypeVar('R')
+S = t.TypeVar('S')
 
 
-# TODO: Extract this out into two window samplers
-class WindowSampler:
-    def __init__(self, md_sim: MarketDataSim, window_length: int, universe: t.List[int]) -> None:
-        assert window_length >= 2
+class WindowSampler(SimNode[t.Optional[t.Tuple[R, S]]]):
+    def __init__(self, back: SimNode[t.Optional[R]], front: SimNode[t.Optional[S]],
+                 window_length: int, universe: t.List[int]) -> None:
+        assert window_length >= 1
 
-        self.ema_window_length = window_length
+        self.window_length = window_length
         self.universe = universe
-        self.universe_size = len(self.universe)
+        self.size = len(self.universe)
         self.cid_idx = {}
         for idx, cid in enumerate(self.universe):
             self.cid_idx[cid] = idx
 
-        self.ema = EMA(md_sim, EMA_ALPHA)
-        self.md_sim = md_sim
+        self.back_input = back
+        self.front_input = front
 
-        # TODO: See if we can optimize this a bit
-        self.ema_window: t.List[t.List[float]] = [[] for _ in range(self.universe_size)]
-        self.raw_window: t.List[t.List[float]] = [[] for _ in range(self.universe_size)]
+        self.back_window: t.List[t.List[t.Optional[R]]] = [[] for _ in range(self.size)]
 
         self.cur_time = 0
 
@@ -35,48 +36,50 @@ class WindowSampler:
         assert timestamp >= self.cur_time
         if timestamp == self.cur_time:
             return
-        self.ema.poll(timestamp)
-        self.md_sim.poll(timestamp)
+        self.back_input.poll(timestamp)
+        self.front_input.poll(timestamp)
 
-        sample = self.ema.sample(universe=self.universe)
-        raw_sample = self.md_sim.sample(universe=self.universe)
-        for idx, (ema_val, raw_val) in enumerate(zip(sample, raw_sample)):
-            if ema_val is None:
-                self.ema_window[idx].clear()
-                self.raw_window[idx].clear()
-            else:
-                assert raw_val is not None
-                self.ema_window[idx].append(ema_val)
-                self.raw_window[idx].append(raw_val)
+        sample = self.back_input.sample(universe=self.universe)
+        for idx, raw_val in enumerate(sample):
+            self.back_window[idx].append(raw_val)
 
-            # TODO: Should this be 2n - 1 instead of 2n?
-            if len(self.ema_window[idx]) > 2 * self.ema_window_length:
-                self.ema_window[idx].pop(0)
-                self.raw_window[idx].pop(0)
+            if len(self.back_window[idx]) > self.window_length:
+                self.back_window[idx].pop(0)
 
         self.cur_time = timestamp
 
-    def _compute_window(self, cid: int) -> t.Optional[t.Tuple[float, float]]:
-        idx = self.cid_idx[cid]
-        window = self.ema_window[idx]
-        raw_window = self.raw_window[idx]
-        if len(window) == 2 * self.ema_window_length:
-            return (window[self.ema_window_length - 1] - window[0], window[-1] - raw_window[self.ema_window_length])
-        else:
-            return None
-
-    def sample(self, universe: t.Optional[t.List[int]] = None) -> t.List[t.Optional[t.Tuple[float, float]]]:
+    def sample(self, universe: t.Optional[t.List[int]] = None) -> t.List[t.Optional[t.Tuple[R, S]]]:
         if universe is None:
             universe = self.universe
 
-        return [self._compute_window(cid) for cid in universe]
+        front_values = self.front_input.sample(universe=universe)
+
+        def compute_window(cid):
+            idx = self.cid_idx[cid]
+            if len(self.back_window[idx]) < self.window_length:
+                return None
+
+            back_val, front_val = self.back_window[idx][0], front_values[idx]
+            if back_val is not None and front_val is not None:
+                return (back_val, front_val)
+            else:
+                return None
+        return [compute_window(cid) for cid in universe]
 
 
-def sample_md(market_data: pd.DataFrame, window_length: int, sample_interval: int, universe: t.List[int]):
+def sample_md(market_data: pd.DataFrame, window_length: int, sample_interval: int, universe: t.List[int],
+              ema_alpha=EMA_ALPHA):
     md_provider = DataFrameProvider(market_data)
     md_sim = MarketDataSim(universe, md_provider)
+    md_ema = EMA(md_sim, EMA_ALPHA)
 
-    window_sampler = WindowSampler(md_sim, window_length, universe)
+    back_window = WindowSampler(md_ema, md_ema, window_length, universe)
+    front_window = WindowSampler(md_sim, md_ema, window_length, universe)
+
+    back_return = Return(back_window, universe)
+    front_return = Return(front_window, universe)
+
+    window_sampler = WindowSampler(back_return, front_return, window_length, universe)
 
     start_time = market_data.index[0][0].value
     end_time = market_data.index[-1][0].value
@@ -97,6 +100,7 @@ def sample_md(market_data: pd.DataFrame, window_length: int, sample_interval: in
 if __name__ == "__main__":
     # For unit testing
     import pi_trading_lib.data.market_data as market_data
+    # Write some testcases
 
     data = market_data.get_df(datetime.datetime(2021, 1, 20).date(), datetime.datetime(2021, 1, 20).date())
     corrs = sample_md(data, 60, 10, [24804])

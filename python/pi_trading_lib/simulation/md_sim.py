@@ -1,17 +1,14 @@
 import typing as t
 
 from pi_trading_lib.data.market_data import MarketDataProvider
+from pi_trading_lib.simulation.components import SimNode
 
 
-class MarketDataSim:
+class MarketDataSim(SimNode[t.Optional[float]]):
     def __init__(self, universe: t.List[int], md_provider: MarketDataProvider) -> None:
-        self.md_provider = md_provider
-        self.universe = universe
-        self.size = len(self.universe)
-        self.cid_idx: t.Dict[int, int] = {}
-        for idx, cid in enumerate(self.universe):
-            self.cid_idx[cid] = idx
+        SimNode.__init__(self, universe)
 
+        self.md_provider = md_provider
         self.cur_val: t.List[t.Optional[float]] = [None for _ in range(self.size)]
 
         # Used for sanity checking
