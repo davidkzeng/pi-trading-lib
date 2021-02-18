@@ -1,5 +1,4 @@
 import typing as t
-import itertools
 
 import pandas as pd
 
@@ -60,7 +59,7 @@ class WindowSampler(SimNode[t.Optional[t.Tuple[R, S]]]):
 
 # sample self correlation
 def sample_md(market_data: pd.DataFrame, window_length: int, sample_interval: int, universe: t.List[int],
-              ema_alpha=EMA_ALPHA):
+              ema_alpha=EMA_ALPHA) -> pd.DataFrame:
     md_provider = DataFrameProvider(market_data)
     md_sim = MarketDataSim(universe, md_provider)
     md_ema = EMA(md_sim, ema_alpha)
@@ -77,7 +76,7 @@ def sample_md(market_data: pd.DataFrame, window_length: int, sample_interval: in
     end_time = market_data.index[-1][0].value
 
     counter = 0
-    samples: t.List[t.List[t.Optional[t.Tuple[float, float]]]] = []
+    samples: t.List[t.Tuple[int, int, float, float]] = []
 
     for cur_time in range(start_time, end_time + 1, 1 * NANOS_IN_MIN):
         window_sampler.poll(cur_time)
@@ -93,8 +92,16 @@ def sample_md(market_data: pd.DataFrame, window_length: int, sample_interval: in
             print('return_window', window_sampler.sample())
             print('')
             """
-            samples.append(window_sampler.sample())
+            current_sample = window_sampler.sample()
+            annotated_sample = []
+            for idx, p in enumerate(current_sample):
+                if p is None:
+                    continue
+                x, y = p
+                annotated_sample.append((universe[idx], cur_time, x, y))
+            samples.extend(annotated_sample)
         counter += 1
 
-    flat_samples = list(itertools.chain(*samples))
-    return [sample for sample in flat_samples if sample is not None]
+    samples_df = pd.DataFrame(samples, columns=['contract_id', 'timestamp', 'back', 'front'])
+    samples_df = samples_df.set_index(['timestamp', 'contract_id'])
+    return samples_df

@@ -16,7 +16,7 @@ class SimNode(t.Generic[T]):
     inputs: t.List['SimNode']
 
     def __init__(self, universe: t.List[int], inputs=[]):
-        self.universe = universe
+        self.universe = list(universe)
         self.size = len(self.universe)
         self.cid_idx = {}
         for idx, cid in enumerate(self.universe):

@@ -3,7 +3,6 @@ import datetime
 # import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from scipy import stats
-import numpy as np
 
 import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.data.data_archive as data_archive
@@ -16,7 +15,7 @@ def main():
     parser.add_argument('end_date')
     parser.add_argument('window')  # minutes
     parser.add_argument('rate')  # minutes
-    parser.add_argument('cids', nargs='+')
+    parser.add_argument('cids', nargs='+') # TODO allow cids to be *
     parser.add_argument('--data-archive')
     parser.add_argument('--cutoff', default=0.01)
 
@@ -30,16 +29,18 @@ def main():
     end_date = datetime.datetime.strptime(args.end_date, '%Y%m%d').date()
     data = market_data.get_df(start_date, end_date, contracts=cids)
 
-    corrs = window_corr.sample_md(data, int(args.window), int(args.rate), cids)
-    corrs = [(x, y) for x, y in corrs if abs(x) >= float(args.cutoff)]
-    x, y = list(zip(*corrs))
-    x, y = np.array(x), np.array(y)
+    corrs_df = window_corr.sample_md(data, int(args.window), int(args.rate), cids)
+    corrs_df = corrs_df.reset_index()
+    corrs_df = corrs_df[corrs_df['back'].abs() >= float(args.cutoff)]
+    corrs_df['text'] = corrs_df['contract_id'].astype(str) + '_' + corrs_df['timestamp'].astype(str)
+
+    x, y = corrs_df['back'].to_numpy(), corrs_df['front'].to_numpy()
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
     print(slope, intercept, r_value)
 
     line = slope * x + intercept
     fig = go.Figure(data=[
-        go.Scattergl(x=x, y=y, mode='markers'),
+        go.Scattergl(x=x, y=y, text=corrs_df['text'], mode='markers'),
         go.Scattergl(x=x, y=line, mode='lines')
     ])
     fig.show()
