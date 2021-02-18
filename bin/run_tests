@@ -1,0 +1,5 @@
+#!/bin/bash
+
+bin=$(dirname $(realpath "$0"))
+
+$bin/python -m unittest discover -s $bin/../python/pi_trading_lib -p "*_test.py" -v

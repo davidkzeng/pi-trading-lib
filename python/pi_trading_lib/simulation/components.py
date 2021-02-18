@@ -43,7 +43,7 @@ class EMA(SimNode[t.Optional[float]]):
         assert alpha >= 0 and alpha < 1
         assert sample_interval >= 1
 
-        SimNode.__init__(self, inp.universe.copy())
+        SimNode.__init__(self, inp.universe.copy(), inputs=[inp])
 
         self.ema_val: t.List[t.Optional[float]] = [None for _ in range(self.size)]
         self.sample_interval = sample_interval
