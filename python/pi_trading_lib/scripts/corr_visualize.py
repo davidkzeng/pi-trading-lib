@@ -15,7 +15,7 @@ def main():
     parser.add_argument('end_date')
     parser.add_argument('window')  # minutes
     parser.add_argument('rate')  # minutes
-    parser.add_argument('cids', nargs='+') # TODO allow cids to be *
+    parser.add_argument('cids', nargs='+')  # TODO allow cids to be *
     parser.add_argument('--data-archive')
     parser.add_argument('--cutoff', default=0.01)
 

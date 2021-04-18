@@ -39,6 +39,7 @@ fn main() {
         let next_loop_time = current_time_millis() + POLL_INTERVAL_SECS * 1000;
 
         if loop_start_time > die_time_millis {
+            println!("Exiting loop at time {}", current_time_millis());
             break loop_start_time;
         }
         println!("Fetch market data at time {}", current_time_millis());
