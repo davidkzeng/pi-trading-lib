@@ -53,7 +53,30 @@ pub struct PIDataPacket {
     pub market_updates: HashMap<u64, MarketData>,
 }
 
-pub type MarketDataResult = Result<PIDataPacket, MarketDataError>;
+// V2 of PIDataPacket, going for more generic, event oriented, easy to csv serialize
+pub struct DataPacket {
+    pub timestamp: DateTime<Utc>,
+    pub payload: PacketPayload
+}
+
+pub enum PacketPayload {
+    PIContractQuote {
+        id: u64,
+        market_id: u64,
+        name: String,
+        market_name: String,
+        status: Status,
+        trade_price: f64,
+        ask_price: f64,
+        bid_price: f64
+    }
+}
+
+impl PacketPayload {
+
+}
+
+pub type MarketDataResult = Result<Option<PIDataPacket>, MarketDataError>;
 pub trait MarketDataSource {
     fn fetch_market_data(&mut self) -> MarketDataResult;
 }
@@ -93,26 +116,57 @@ impl MarketDataSource for MarketDataLive {
     }
 }
 
-pub struct MarketDataSim {
+// Delete once we remove Json from the pipeline
+pub struct MarketDataSimJson {
     data_reader: BufReader<File>,
     line_buffer: String
 }
 
-impl MarketDataSim {
+impl MarketDataSimJson {
     pub fn new(filename: &str) -> Self {
         let data_file = File::open(filename).unwrap();
-        MarketDataSim { 
-            data_reader: BufReader::new(data_file), 
+        MarketDataSimJson {
+            data_reader: BufReader::new(data_file),
             line_buffer: String::new()
         }
     }
 }
 
-impl MarketDataSource for MarketDataSim {
+impl MarketDataSource for MarketDataSimJson {
     fn fetch_market_data(&mut self) -> MarketDataResult {
-        self.data_reader.read_line(&mut self.line_buffer).unwrap();
+        let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
+        if bytes_read == 0 {
+            return Ok(None);
+        }
         let market_data: PIDataPacket = serde_json::from_str(&mut self.line_buffer).unwrap();
         self.line_buffer.clear();
-        Ok(market_data)
+        Ok(Some(market_data))
+    }
+}
+
+pub struct MarketDataSimCsv {
+    data_reader: BufReader<File>,
+    line_buffer: String
+}
+
+impl MarketDataSimCsv {
+    pub fn new(filename: &str) -> Self {
+        let data_file = File::open(filename).unwrap();
+        MarketDataSimCsv {
+            data_reader: BufReader::new(data_file),
+            line_buffer: String::new()
+        }
+    }
+}
+
+impl MarketDataSource for MarketDataSimCsv {
+    fn fetch_market_data(&mut self) -> MarketDataResult {
+        let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
+        if bytes_read == 0 {
+            return Ok(None);
+        }
+        let market_data: PIDataPacket = serde_json::from_str(&mut self.line_buffer).unwrap();
+        self.line_buffer.clear();
+        Ok(Some(market_data))
     }
 }

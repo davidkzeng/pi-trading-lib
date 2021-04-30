@@ -29,9 +29,9 @@ pub struct Contract {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ContractPrice {
-    trade_price: f64,
-    ask_price: f64,
-    bid_price: f64
+    pub trade_price: f64,
+    pub ask_price: f64,
+    pub bid_price: f64
 }
 
 impl ContractPrice {
@@ -50,6 +50,14 @@ pub struct PIDataState {
 impl PIDataState {
     pub fn new() -> Self {
         PIDataState { markets: HashMap::new(), contracts: HashMap::new() }
+    }
+
+    pub fn get_market(&self, id: u64) -> Option<&Market> {
+        self.markets.get(&id)
+    }
+
+    pub fn get_contract(&self, id: u64) -> Option<&Contract> {
+        self.contracts.get(&id)
     }
 
     pub fn get_market_mut(&mut self, id: u64) -> Option<&mut Market> {

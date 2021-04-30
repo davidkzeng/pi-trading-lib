@@ -183,7 +183,7 @@ pub fn fetch_api_market_data() -> MarketDataResult {
             all_market_data_map.insert(market.id, market);
         }
 
-        Ok(PIDataPacket { market_updates: all_market_data_map })
+        Ok(Some(PIDataPacket { market_updates: all_market_data_map }))
     } else {
         println!("{:?}", resp);
         Err(MarketDataError(MarketDataErrorKind::APIUnavailable))
