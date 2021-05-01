@@ -62,7 +62,7 @@ fn write_column<W: Write, T: ToString + ?Sized>(writer: &mut W, val: Option<&T>)
 }
 
 pub enum PacketPayload {
-    PIContractQuote {
+    PIQuote {
         id: u64,
         market_id: u64,
         name: String,
@@ -75,6 +75,7 @@ pub enum PacketPayload {
 }
 
 impl PacketPayload {
+    const TYPE: &'static str = "type";
     const ID: &'static str = "id";
     const MARKET_ID: &'static str = "market_id";
     const STATUS: &'static str = "status";
@@ -84,7 +85,8 @@ impl PacketPayload {
 
     pub fn csv_serialize<T: Write>(&self, write_buf: &mut T) {
         match self {
-            PacketPayload::PIContractQuote { id, market_id, status, trade_price, ask_price, bid_price, .. } => {
+            PacketPayload::PIQuote { id, market_id, status, trade_price, ask_price, bid_price, .. } => {
+                write_column(write_buf, Some("piquote"));
                 write_column(write_buf, Some(id));
                 write_column(write_buf, Some(market_id));
                 write_column(write_buf, Some(status));
@@ -96,6 +98,7 @@ impl PacketPayload {
     }
 
     pub fn write_header<T: Write>(write_buf: &mut T) {
+        write_column(write_buf, Some(Self::TYPE));
         write_column(write_buf, Some(Self::ID));
         write_column(write_buf, Some(Self::MARKET_ID));
         write_column(write_buf, Some(Self::STATUS));

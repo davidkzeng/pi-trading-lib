@@ -1,5 +1,6 @@
 name,location
 market_data_raw,market_data_raw/{date}.json
+market_data_csv,market_data_csv/{date}.csv
 pres_national_2020,fivethirtyeight/pres_national_2020/{date}.csv
 pres_state_2020,fivethirtyeight/pres_state_2020/{date}.csv
 pres_ev_2020,fivethirtyeight/pres_ev_2020/{date}.csv

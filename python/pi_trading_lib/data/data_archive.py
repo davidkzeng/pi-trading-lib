@@ -15,7 +15,7 @@ def set_archive_dir(loc: str):
 
 
 def get_archive_dir():
-    assert _archive_dir is not None, "data archive not initialized"
+    assert _archive_dir is not None, 'data archive not initialized'
 
     return _archive_dir
 

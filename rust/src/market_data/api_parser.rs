@@ -98,7 +98,10 @@ fn get_market(market_map: &JsonMap) -> Result<MarketData, MarketDataError> {
 
 pub fn fetch_market_data(id: u64) -> Result<MarketData, MarketDataError> {
     let api_address = format!("{} {}", MARKET_API_ADDRESS, id);
-    let resp = ureq::get(&api_address).call();
+    let resp = ureq::get(&api_address)
+        .timeout_connect(15_000)  // fairly generous connect and read timeouts
+        .timeout_read(15_000)
+        .call();
 
     if resp.ok() {
         // TODO: Wrap library errors into MarketDataError

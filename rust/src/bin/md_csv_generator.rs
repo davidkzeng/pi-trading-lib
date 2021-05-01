@@ -38,5 +38,6 @@ fn main() {
         }
     }
 
+    println!("Wrote {} packets", write_counter);
     println!("Finished writing");
 }

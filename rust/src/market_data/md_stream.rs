@@ -111,7 +111,7 @@ pub fn ingest_and_transform(state: &mut PIDataState, data: &PIDataPacket) -> Vec
             let contract_state = state.get_contract(contract_id).unwrap();
             let data_packet = DataPacket {
                 timestamp:  market_state.data_ts,
-                payload: PacketPayload::PIContractQuote {
+                payload: PacketPayload::PIQuote {
                     id: contract_state.id,
                     market_id: contract_state.market_id,
                     name: contract_state.name.clone(), // TODO: This is inefficient
