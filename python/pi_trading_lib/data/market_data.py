@@ -1,6 +1,5 @@
 import typing as t
 import os.path
-import json
 import logging
 import datetime
 import functools
@@ -8,7 +7,6 @@ from collections import namedtuple
 from abc import abstractmethod
 
 import pandas as pd
-import dateutil.parser
 
 import pi_trading_lib.data.data_archive as data_archive
 import pi_trading_lib.dates as dates
@@ -18,37 +16,37 @@ import pi_trading_lib.utils as utils
 
 COLUMNS = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 'trade_price', 'name']
 
+# Convenience factor, we should really be reading this from a text file in the data archive
+MISSING_MARKET_DATA = [
+    '20200917',
+    '20200922',
+    '20200923',
+    '20201008',
+    '20201012',
+    '20201103',
+    '20201104',
+    '20210403',
+    '20210413',
+]
+
+
+def incomplete_market_data(date: datetime.date) -> bool:
+    return dates.to_date_str(date) in MISSING_MARKET_DATA
+
 
 def get_raw_data(date: datetime.date) -> pd.DataFrame:
     """Get raw data for date as dataframe"""
-    market_data_file = data_archive.get_data_file('market_data_raw', {'date': dates.to_date_str(date)})
+    market_data_file = data_archive.get_data_file('market_data_csv', {'date': dates.to_date_str(date)})
     if not os.path.exists(market_data_file):
         logging.warn('No raw market data for {date}'.format(date=str(date)))
         md_df = pd.DataFrame([], columns=COLUMNS)
     else:
-        market_updates, contract_updates = [], []
-
-        logging.info('Loading raw market data file %s' % market_data_file)
-        with open(market_data_file, 'r') as market_data_f:
-            for line in market_data_f:
-                line = line.rstrip()
-                updates = json.loads(line)['market_updates']  # Map from market_id -> market_info
-                market_updates.extend(updates.values())
-
-        for market_update in market_updates:
-            market_update['timestamp'] = dateutil.parser.isoparse(market_update['timestamp'])
-            for contract_update in market_update['contracts']:
-                contract_updates.append({
-                    'timestamp': market_update['timestamp'],
-                    'market_id': market_update['id'],
-                    'contract_id': contract_update['id'],
-                    'bid_price': contract_update['bid_price'],
-                    'ask_price': contract_update['ask_price'],
-                    'trade_price': contract_update['trade_price'],
-                    'name': market_update['name'] + ':' + contract_update['name']
-                })
-
-        md_df = pd.DataFrame(contract_updates)
+        logging.info('Loading market data file %s' % market_data_file)
+        md_df = pd.read_csv(market_data_file)
+        md_df['name'] = ''
+        md_df['contract_id'] = md_df['id']
+        md_df['timestamp'] = pd.to_datetime(md_df['timestamp'], unit='ms')
+        md_df = md_df[COLUMNS]
 
     md_df = md_df.set_index(['timestamp', 'contract_id'])
     md_df = md_df.sort_index(level='timestamp')

@@ -29,19 +29,19 @@ def _run_converter(date, force=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('begin_date')
+    parser.add_argument('start_date')
     parser.add_argument('end_date')
     parser.add_argument('data_archive')
     parser.add_argument('--force', action='store_true')
 
     args = parser.parse_args()
 
-    begin_date = dates.from_date_str(args.begin_date)
+    start_date = dates.from_date_str(args.start_date)
     end_date = dates.from_date_str(args.end_date)
 
     pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
-    for date in dates.date_range(begin_date, end_date):
+    for date in dates.date_range(start_date, end_date):
         _run_converter(date, force=args.force)
 
 
