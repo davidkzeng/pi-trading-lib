@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::{thread, time};
 
 use serde::{Serialize, Deserialize};
@@ -53,10 +53,12 @@ pub struct PIDataPacket {
     pub market_updates: HashMap<u64, MarketData>,
 }
 
-// V2 of PIDataPacket, going for more generic, event oriented, easy to csv serialize
-pub struct DataPacket {
-    pub timestamp: DateTime<Utc>,
-    pub payload: PacketPayload
+// TODO: Maybe we want this Sized restriction?
+fn write_column<W: Write, T: ToString + ?Sized>(writer: &mut W, val: Option<&T>) {
+    if let Some(v) = val {
+        writer.write(v.to_string().as_bytes()).unwrap();
+    }
+    writer.write(",".as_bytes()).unwrap();
 }
 
 pub enum PacketPayload {
@@ -67,13 +69,65 @@ pub enum PacketPayload {
         market_name: String,
         status: Status,
         trade_price: f64,
+        bid_price: f64,
         ask_price: f64,
-        bid_price: f64
     }
 }
 
 impl PacketPayload {
+    const ID: &'static str = "id";
+    const MARKET_ID: &'static str = "market_id";
+    const STATUS: &'static str = "status";
+    const TRADE_PRICE: &'static str = "trade_price";
+    const BID_PRICE: &'static str = "bid_price";
+    const ASK_PRICE: &'static str = "ask_price";
 
+    pub fn csv_serialize<T: Write>(&self, write_buf: &mut T) {
+        match self {
+            PacketPayload::PIContractQuote { id, market_id, status, trade_price, ask_price, bid_price, .. } => {
+                write_column(write_buf, Some(id));
+                write_column(write_buf, Some(market_id));
+                write_column(write_buf, Some(status));
+                write_column(write_buf, Some(trade_price));
+                write_column(write_buf, Some(bid_price));
+                write_column(write_buf, Some(ask_price));
+            }
+        }
+    }
+
+    pub fn write_header<T: Write>(write_buf: &mut T) {
+        write_column(write_buf, Some(Self::ID));
+        write_column(write_buf, Some(Self::MARKET_ID));
+        write_column(write_buf, Some(Self::STATUS));
+        write_column(write_buf, Some(Self::TRADE_PRICE));
+        write_column(write_buf, Some(Self::BID_PRICE));
+        write_column(write_buf, Some(Self::ASK_PRICE));
+    }
+}
+
+// V2 of PIDataPacket, going for more generic, event oriented, easy to csv serialize
+pub struct DataPacket {
+    pub timestamp: DateTime<Utc>,
+    pub payload: PacketPayload
+}
+
+impl DataPacket {
+    const TIMESTAMP: &'static str = "timestamp";
+
+    pub fn csv_serialize<T: Write>(&self, writer: &mut T) {
+        // Performance question? Is using a byte array faster?
+        let mut bytes: Vec<u8> = Vec::with_capacity(128);
+        write_column(&mut bytes, Some(&self.timestamp.timestamp()));
+        self.payload.csv_serialize(&mut bytes);
+        writeln!(&mut bytes).unwrap();
+        writer.write_all(&bytes).unwrap();
+    }
+
+    pub fn write_header<T: Write>(writer: &mut T) {
+        write_column(writer, Some(Self::TIMESTAMP));
+        PacketPayload::write_header(writer);
+        writeln!(writer).unwrap();
+    }
 }
 
 pub type MarketDataResult = Result<Option<PIDataPacket>, MarketDataError>;

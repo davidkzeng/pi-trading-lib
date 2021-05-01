@@ -48,8 +48,9 @@ fn ingest_one_market_data(state: &mut PIDataState, market_data: &MarketData) -> 
     let market_id = market_data.id;
     if let Some(market) = state.get_market_mut(market_id) {
         if market_data.timestamp >= market.data_ts {
+            market.data_ts = market_data.timestamp;
             for contract_data in &market_data.contracts {
-                let contract_update = ingest_one_contract_data(state,market_id, contract_data);
+                let contract_update = ingest_one_contract_data(state, market_id, contract_data);
                 if contract_update {
                     updated_contracts.push(contract_data.id);
                 }

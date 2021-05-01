@@ -2,11 +2,34 @@ use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
 use std::collections::HashMap;
+use std::fmt;
+use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
     Open,
     Closed
+}
+
+impl fmt::Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Status::Open => write!(f, "OPEN"),
+            Status::Closed => write!(f, "CLOSED"),
+        }
+    }
+}
+
+impl FromStr for Status {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<Status, Self::Err> {
+        match input {
+            "OPEN" => Ok(Status::Open),
+            "CLOSED" => Ok(Status::Closed),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Debug)]
