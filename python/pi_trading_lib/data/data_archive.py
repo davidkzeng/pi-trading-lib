@@ -34,7 +34,7 @@ def _get_data_archives() -> t.Dict[str, str]:
     return data_archives
 
 
-def get_data_file(name: str, template_vals: t.Dict[str, t.Any]) -> str:
+def get_data_file(name: str, template_vals: t.Dict[str, t.Any] = {}) -> str:
     data_archives = _get_data_archives()
     location_template = data_archives[name]
     location = location_template.format(**template_vals)

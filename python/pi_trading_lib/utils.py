@@ -15,10 +15,3 @@ def get_package_dir():
 
 def get_rust_bin_dir():
     return os.path.join(get_package_dir(), 'rust_bin')
-
-
-def copy(func):
-    def decorated_func(*args, **kwargs):
-        result = func(*args, **kwargs)
-        return result.copy()
-    return decorated_func

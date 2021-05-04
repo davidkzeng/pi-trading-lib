@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 
 import pi_trading_lib.data.data_archive
 import pi_trading_lib.data.market_data
-import pi_trading_lib.dates as dates
+import pi_trading_lib.date_util as date_util
 
 
 def main():
@@ -21,11 +21,11 @@ def main():
     if args.data_archive:
         pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
-    start_date = dates.from_date_str(args.start_date)
-    end_date = dates.from_date_str(args.end_date)
+    start_date = date_util.from_date_str(args.start_date)
+    end_date = date_util.from_date_str(args.end_date)
 
     if args.hist:
-        date_range = list(dates.date_range(start_date, end_date))
+        date_range = list(date_util.date_range(start_date, end_date))
         dfs = []
         for date in date_range:
             df = pi_trading_lib.data.market_data.get_raw_data(date)
@@ -44,7 +44,7 @@ def main():
         fig = go.Figure([go.Bar(x=counts.index.to_numpy().astype(str), y=counts.to_numpy())])
         fig.show()
     else:
-        date_range = list(dates.date_range(start_date, end_date))
+        date_range = list(date_util.date_range(start_date, end_date))
         df_lengths = []
         df_date_range = []
         for date in date_range:

@@ -2,13 +2,13 @@ import os
 import argparse
 import subprocess
 
-import pi_trading_lib.dates as dates
+import pi_trading_lib.date_util as date_util
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
 
 
 def _run_converter(date, force=False):
-    date_str = dates.to_date_str(date)
+    date_str = date_util.to_date_str(date)
     input_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_raw', {'date': date_str})
     output_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_csv', {'date': date_str})
 
@@ -38,12 +38,12 @@ def main():
 
     args = parser.parse_args()
 
-    start_date = dates.from_date_str(args.start_date)
-    end_date = dates.from_date_str(args.end_date)
+    start_date = date_util.from_date_str(args.start_date)
+    end_date = date_util.from_date_str(args.end_date)
 
     pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
-    for date in dates.date_range(start_date, end_date):
+    for date in date_util.date_range(start_date, end_date):
         _run_converter(date, force=args.force)
 
 
