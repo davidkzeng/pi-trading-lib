@@ -4,7 +4,10 @@ set -e
 package_dir=$(dirname $(dirname $(realpath "$0")))
 
 venv=$(cd $package_dir/python && poetry env info -p)
-[[ -d "$venv" ]]
+if [[ ! -d "$venv" ]]; then
+    echo "Poetry installed python path not found"
+    exit 1
+fi
 source $venv/bin/activate
 
 "$@"

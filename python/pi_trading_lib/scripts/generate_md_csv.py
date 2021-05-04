@@ -19,6 +19,8 @@ def _run_converter(date, force=False):
         print(f'Skipping existing output file for date {date} at uri {output_uri}')
         return
 
+    os.makedirs(os.path.dirname(output_uri), exist_ok=True)
+
     print(f'Running convert for date {date}')
     subprocess.check_call([
         os.path.join(pi_trading_lib.utils.get_rust_bin_dir(), 'md_csv_generator'),
