@@ -4,11 +4,13 @@ import functools
 import json
 import os
 import logging
+import datetime
 
 import pi_trading_lib
 import pi_trading_lib.fs as fs
 import pi_trading_lib.date_util as date_util
 import pi_trading_lib.data.contract_db as contract_db
+import pi_trading_lib.timers
 
 
 def save_contract_data(name: str, data: t.Dict[int, t.Dict[int, t.List]]):
@@ -48,6 +50,7 @@ def get_contract_ids(name: str) -> t.List[int]:
     return list(get_contract_data_by_cid(name).keys())
 
 
+@pi_trading_lib.timers.timer
 def get_contracts(ids: t.List[int] = []):
     if len(ids) == 0:
         query = 'SELECT * FROM contract'
@@ -58,6 +61,7 @@ def get_contracts(ids: t.List[int] = []):
     return [{'id': contract[0], 'name': contract[1], 'market_id': contract[2]} for contract in contracts]
 
 
+@pi_trading_lib.timers.timer
 def get_markets(ids: t.List[int] = []):
     if len(ids) == 0:
         query = 'SELECT * FROM market'
@@ -68,20 +72,72 @@ def get_markets(ids: t.List[int] = []):
     return [{'id': market[0], 'name': market[1]} for market in markets]
 
 
-def add_contract(contract):
+@pi_trading_lib.timers.timer
+def add_contracts(contracts):
+    contract_rows = [
+        (contract['id'], contract['name'], contract['market_id'], contract['begin_date'].isoformat(), None)
+        for contract in contracts
+    ]
     db = contract_db.get_contract_db()
     with db:
-        db.execute('INSERT INTO contract VALUES (?, ?, ?, ?, ?)',
-                   (contract['id'], contract['name'], contract['market_id'], None, None))
+        db.executemany('INSERT INTO contract VALUES (?, ?, ?, ?, ?)', contract_rows)
 
 
-def add_market(market):
+@pi_trading_lib.timers.timer
+def update_contract_dates(contract_ids: t.List[int], alive_date: datetime.date):
+    alive_date_str = alive_date.isoformat()
+    query = f"""
+        SELECT id FROM contract
+        WHERE id IN {contract_db.to_sql_list(contract_ids)}
+        AND (begin_date IS NULL OR begin_date > '{alive_date_str}')
+    """
+    results = contract_db.get_contract_db().cursor().execute(query).fetchall()
+    begin_date_update_ids = [result[0] for result in results]
+    print(f'Setting or extending begin date for {len(results)} contracts')
+    with contract_db.get_contract_db() as db:
+        db.execute(
+            f"""UPDATE contract SET begin_date = '{alive_date_str}'
+                WHERE id IN {contract_db.to_sql_list(begin_date_update_ids)}
+            """)
+
+    query = f"""
+        SELECT id FROM contract
+        WHERE id IN {contract_db.to_sql_list(contract_ids)} AND end_date < '{alive_date_str}'
+    """
+    results = contract_db.get_contract_db().cursor().execute(query).fetchall()
+    end_date_update_ids = [result[0] for result in results]
+    print(f'Extending end date for {len(results)} contracts')
+    with contract_db.get_contract_db() as db:
+        db.execute(
+            f"""UPDATE contract SET end_date = '{alive_date_str}'
+                WHERE id IN {contract_db.to_sql_list(end_date_update_ids)}
+            """)
+
+    query = f"""
+        SELECT id FROM contract
+        WHERE id NOT IN {contract_db.to_sql_list(contract_ids)}
+        AND end_date IS NULL AND begin_date < '{alive_date_str}'
+    """
+    results = contract_db.get_contract_db().cursor().execute(query).fetchall()
+    end_date_update_ids = [result[0] for result in results]
+    print(f'Setting end date for {len(results)} contracts')
+    with contract_db.get_contract_db() as db:
+        db.execute(
+            f"""UPDATE contract SET end_date = '{alive_date_str}'
+                WHERE id IN {contract_db.to_sql_list(end_date_update_ids)}
+            """)
+
+
+@pi_trading_lib.timers.timer
+def add_markets(markets):
+    market_rows = [(market['id'], market['name']) for market in markets]
     db = contract_db.get_contract_db()
     with db:
-        db.execute('INSERT INTO market VALUES (?, ?)', (market['id'], market['name']))
+        db.executemany('INSERT INTO market VALUES (?, ?)', (market_rows))
 
 
-def create_contracts_from_market_data(date):
+@pi_trading_lib.timers.timer
+def update_contract_db_from_market_data_json(date):
     daily_contracts: t.Dict[int, t.Dict] = {}
     daily_markets: t.Dict[int, t.Dict] = {}
     market_data_file = pi_trading_lib.data.data_archive.get_data_file(
@@ -98,7 +154,8 @@ def create_contracts_from_market_data(date):
                         daily_contracts[contract_id] = {
                             'id': contract_id,
                             'name': contract['name'],
-                            'market_id': int(market['id'])
+                            'market_id': int(market['id']),
+                            'begin_date': date,
                         }
                 if market_id not in daily_markets:
                     daily_markets[market_id] = {
@@ -111,14 +168,12 @@ def create_contracts_from_market_data(date):
     missing_markets = set(daily_markets.keys()) - set(market['id'] for market in db_markets)
     missing_contracts = set(daily_contracts.keys()) - set(contract['id'] for contract in db_contracts)
 
-    print(f'Adding {len(missing_markets)} new markets')
-    print(f'Adding {len(missing_contracts)} new contracts')
+    if len(missing_markets) > 0:
+        print(f'Adding {len(missing_markets)} new markets')
+        add_markets([daily_markets[market_id] for market_id in sorted(list(missing_markets))])
+    if len(missing_contracts) > 0:
+        print(f'Adding {len(missing_contracts)} new contracts')
+        add_contracts([daily_contracts[contract_id] for contract_id in sorted(list(missing_contracts))])
 
-    for market_id in sorted(list(missing_markets)):
-        market = daily_markets[market_id]
-        print('Adding market', market['id'], market['name'])
-        add_market(market)
-    for contract_id in sorted(list(missing_contracts)):
-        contract = daily_contracts[contract_id]
-        print('Adding contract', contract['id'], contract['name'], contract['market_id'])
-        add_contract(contract)
+    print('Updating alive date range for contracts')
+    update_contract_dates(list(daily_contracts.keys()), date)

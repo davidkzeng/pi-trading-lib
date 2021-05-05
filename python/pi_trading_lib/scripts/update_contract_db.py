@@ -4,6 +4,7 @@ import pi_trading_lib.date_util as date_util
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
 import pi_trading_lib.data.contracts as contracts
+import pi_trading_lib.timers as timers
 
 
 def main():
@@ -21,7 +22,9 @@ def main():
 
     for date in date_util.date_range(start_date, end_date):
         print('Running for', date)
-        contracts.create_contracts_from_market_data(date)
+        contracts.update_contract_db_from_market_data_json(date)
+
+    timers.report_timers()
 
 
 if __name__ == "__main__":
