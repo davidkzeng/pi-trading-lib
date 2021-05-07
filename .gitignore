@@ -4,5 +4,3 @@
 *.egg-info
 **/__pycache__
 python/dist
-
-**/data

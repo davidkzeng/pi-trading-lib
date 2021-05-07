@@ -52,6 +52,7 @@ def get_contract_ids(name: str) -> t.List[int]:
 
 @pi_trading_lib.timers.timer
 def get_contracts(ids: t.List[int] = []):
+    # TODO: Make this return dict
     if len(ids) == 0:
         query = 'SELECT * FROM contract'
     else:
@@ -71,6 +72,19 @@ def get_markets(ids: t.List[int] = []):
     markets = contract_db.get_contract_db().cursor().execute(query).fetchall()
     return [{'id': market[0], 'name': market[1]} for market in markets]
 
+
+def get_contract_names(ids: t.List[int]):
+    contracts = get_contracts(ids)
+    contract_market_ids = list(set(contract['market_id'] for contract in contracts))
+    markets = get_markets(contract_market_ids)
+    markets = {market['id']: market['name'] for market in markets}
+    contract_name_map = {}
+    for contract in contracts:
+        contract_name_map[contract['id']] = markets[contract['market_id']] + ' ' + contract['name']
+    return contract_name_map
+
+
+# ========================= Updates =========================
 
 @pi_trading_lib.timers.timer
 def add_contracts(contracts):
@@ -137,7 +151,7 @@ def add_markets(markets):
 
 
 @pi_trading_lib.timers.timer
-def update_contract_db_from_market_data_json(date):
+def update_contract_info(date):
     daily_contracts: t.Dict[int, t.Dict] = {}
     daily_markets: t.Dict[int, t.Dict] = {}
     market_data_file = pi_trading_lib.data.data_archive.get_data_file(

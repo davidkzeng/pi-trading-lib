@@ -44,7 +44,12 @@ def timer(func):
 
 
 def report_timers():
+    def print_format(name, sum_, avg, count):
+        print(f'{name:50.50} {sum_:10} {avg:10} {count:<6}')
+    print('\nTimers:\n')
+    print_format('func_name', 'sum', 'avg', 'count')
     for func_name, timer in _function_timers.items():
         timer_report = timer.report()
         if timer_report is not None:
-            print(func_name, timer_report)
+            sum_, avg, count = timer_report
+            print_format(func_name, sum_, avg, count)

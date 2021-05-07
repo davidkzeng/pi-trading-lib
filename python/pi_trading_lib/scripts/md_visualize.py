@@ -40,10 +40,11 @@ def main():
         fig = go.Figure()
         for series in plot_df:
             fig.add_trace(go.Scatter(
-                x=plot_df.index.to_numpy(),
+                x=plot_df.index,
                 y=plot_df[series].to_numpy(),
                 mode='lines',
-                name=str(series)
+                name=str(series),
+                connectgaps=True,
             ))
         fig.show()
     else:

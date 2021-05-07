@@ -4,6 +4,7 @@ import pi_trading_lib.date_util as date_util
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
 import pi_trading_lib.data.contracts as contracts
+import pi_trading_lib.data.history as history
 import pi_trading_lib.timers as timers
 
 
@@ -12,6 +13,8 @@ def main():
     parser.add_argument('start_date')
     parser.add_argument('end_date')
     parser.add_argument('data_archive')
+
+    parser.add_argument('--force-history', action='store_true')
 
     args = parser.parse_args()
 
@@ -22,7 +25,8 @@ def main():
 
     for date in date_util.date_range(start_date, end_date):
         print('Running for', date)
-        contracts.update_contract_db_from_market_data_json(date)
+        contracts.update_contract_info(date)
+        history.update_bbo_change_count_history(date, replace=args.force_history)
 
     timers.report_timers()
 

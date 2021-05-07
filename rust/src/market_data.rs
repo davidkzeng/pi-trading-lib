@@ -120,7 +120,7 @@ impl DataPacket {
     pub fn csv_serialize<T: Write>(&self, writer: &mut T) {
         // Performance question? Is using a byte array faster?
         let mut bytes: Vec<u8> = Vec::with_capacity(128);
-        write_column(&mut bytes, Some(&self.timestamp.timestamp()));
+        write_column(&mut bytes, Some(&self.timestamp.timestamp_millis()));
         self.payload.csv_serialize(&mut bytes);
         writeln!(&mut bytes).unwrap();
         writer.write_all(&bytes).unwrap();

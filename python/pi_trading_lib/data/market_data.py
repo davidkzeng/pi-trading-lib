@@ -11,6 +11,7 @@ import pandas as pd
 import pi_trading_lib.data.data_archive as data_archive
 import pi_trading_lib.date_util as date_util
 import pi_trading_lib.decorators
+import pi_trading_lib.data.contracts
 
 # TODO: Store market data in contract based format to optimize for common use cases
 
@@ -43,9 +44,10 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
     else:
         logging.info('Loading market data file %s' % market_data_file)
         md_df = pd.read_csv(market_data_file)
-        md_df['name'] = ''
         md_df['contract_id'] = md_df['id']
         md_df['timestamp'] = pd.to_datetime(md_df['timestamp'], unit='ms')
+        contract_name_map = pi_trading_lib.data.contracts.get_contract_names(md_df['contract_id'].unique().tolist())
+        md_df['name'] = md_df['contract_id'].map(contract_name_map)
         md_df = md_df[COLUMNS]
 
     md_df = md_df.set_index(['timestamp', 'contract_id'])
@@ -104,6 +106,12 @@ def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ..
 
 
 def add_market_best_price(df: pd.DataFrame):
+    if True:
+        # Try to support this again, maybe prepopulate in rust?
+        df['best_bid_price'] = df['bid_price']
+        df['best_ask_price'] = df['ask_price']
+        return df
+
     bid_ask_by_market = df.groupby('market_id')[['bid_price', 'ask_price']].sum()
     contracts_in_market = df.reset_index(drop=False).groupby('market_id')['contract_id'].nunique()
 
