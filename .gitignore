@@ -4,3 +4,4 @@
 *.egg-info
 **/__pycache__
 python/dist
+python/pi_trading_lib/rust_bin
