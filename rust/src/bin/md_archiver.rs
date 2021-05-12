@@ -1,5 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::fs::File;
+use std::fs::OpenOptions;
 use std::{env, thread, time};
 use std::convert::TryInto;
 
@@ -31,7 +31,8 @@ fn main() {
     let data_state = PIDataState::new();
     let mut market_data_cache = RawToRawMarketDataCache::new(data_state);
 
-    let output_file = File::create(output_file_name).expect("Unable to create output file");
+    let output_file = OpenOptions::new().append(true)
+        .open(output_file_name).expect("Unable to create output file");
     let mut output_writer = PIDataPacketWriter::new(output_file);
 
     let mut loop_counter = 0;

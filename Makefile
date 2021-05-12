@@ -1,5 +1,5 @@
 all: rust python
-release: rust-release python-release
+release: rust-release python-release rust-push-binary-python
 
 python:
 	cd python/ && $(MAKE)
