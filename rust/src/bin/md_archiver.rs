@@ -1,10 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs::File;
-use std::io::Write;
 use std::{env, thread, time};
 use std::convert::TryInto;
 
-use pi_trading_lib::market_data::{MarketDataLive, MarketDataSource, md_stream};
+use pi_trading_lib::market_data::{MarketDataLive, MarketDataSource, RawMarketDataListener, RawMarketDataProvider};
+use pi_trading_lib::market_data::writer::PIDataPacketWriter;
+use pi_trading_lib::market_data::md_stream::RawToRawMarketDataCache;
 use pi_trading_lib::base::PIDataState;
 
 const API_RETRY_LIMIT: u64 = 5;
@@ -27,10 +28,13 @@ fn main() {
     let output_file_name = &args[1];
     let die_time_millis = args[2].parse::<u64>().expect("Unable to parse die time");
 
-    let mut data_state = PIDataState::new();
-    let mut output_file = File::create(output_file_name).expect("Unable to create output file");
-    let mut loop_counter = 0;
+    let data_state = PIDataState::new();
+    let mut market_data_cache = RawToRawMarketDataCache::new(data_state);
 
+    let output_file = File::create(output_file_name).expect("Unable to create output file");
+    let mut output_writer = PIDataPacketWriter::new(output_file);
+
+    let mut loop_counter = 0;
     let mut api_market_data = MarketDataLive::new_with_retry(API_RETRY_LIMIT);
 
     println!("Starting market data reading");
@@ -45,20 +49,20 @@ fn main() {
         println!("Fetch market data at time {}", current_time_millis());
 
         match api_market_data.fetch_market_data() {
-            Ok(market_data) => {
-                let market_data = market_data.unwrap(); // Currently we assume live market data should always return something
-                let filtered_update = md_stream::ingest_and_filter(&mut data_state, market_data);
-                let update_data_json = serde_json::to_string(&filtered_update).unwrap();
-                output_file.write_all(update_data_json.as_bytes()).expect("Unable to write data");
-                output_file.write_all("\n".as_bytes()).expect("Unable to write new line");
+            Ok(Some(market_data)) => {
+                market_data_cache.process_raw_market_data(&market_data);
+                if let Some(updated_market_data) = market_data_cache.fetch_raw_market_data() {
+                    output_writer.process_raw_market_data(updated_market_data);
+                }
             },
+            Ok(None) => panic!("Current live md implementation should always return market data"),
             Err(err) => {
                 println!("Unable to fetch market data: {:?}", err);
             }
         }
 
         if loop_counter % 60 == 0 {
-            output_file.flush().unwrap();
+            output_writer.flush();
         }
 
         let mut sleep_time: i64 = TryInto::<i64>::try_into(next_loop_time).unwrap() -

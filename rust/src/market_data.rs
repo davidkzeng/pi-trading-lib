@@ -10,6 +10,7 @@ use crate::base::Status;
 
 pub mod md_stream;
 pub mod api_parser;
+pub mod writer;
 
 #[derive(Debug)]
 pub struct MarketDataError(MarketDataErrorKind);
@@ -20,7 +21,7 @@ impl MarketDataError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum MarketDataErrorKind {
     FieldUnavailable(String),
     FieldFormatError(String),
@@ -29,7 +30,7 @@ pub enum MarketDataErrorKind {
     APIUnavailable,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ContractData {
     id: u64,
     name: String,
@@ -39,7 +40,7 @@ pub struct ContractData {
     bid_price: f64
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MarketData {
     id: u64,
     name: String,
@@ -53,7 +54,6 @@ pub struct PIDataPacket {
     pub market_updates: HashMap<u64, MarketData>,
 }
 
-// TODO: Maybe we want this Sized restriction?
 fn write_column<W: Write, T: ToString + ?Sized>(writer: &mut W, val: Option<&T>) {
     if let Some(v) = val {
         writer.write(v.to_string().as_bytes()).unwrap();
@@ -226,4 +226,20 @@ impl MarketDataSource for MarketDataSimCsv {
         self.line_buffer.clear();
         Ok(Some(market_data))
     }
+}
+
+pub trait MarketDataListener {
+    fn process_market_data(&mut self, data: &DataPacket) -> bool;
+}
+
+pub trait RawMarketDataListener {
+    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool;
+}
+
+pub trait MarketDataProvider {
+    fn fetch_market_data(&mut self) -> Option<&DataPacket>;
+}
+
+pub trait RawMarketDataProvider {
+    fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket>;
 }

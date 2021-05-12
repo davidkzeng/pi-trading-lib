@@ -1,12 +1,16 @@
 use std::collections::{HashSet, HashMap};
 
 use crate::base::{PIDataState, Contract, Market, ContractPrice};
+use crate::actor::ActorBuffer;
 use crate::market_data::{
     ContractData,
     MarketData,
     PIDataPacket,
     DataPacket,
-    PacketPayload
+    PacketPayload,
+    RawMarketDataListener,
+    MarketDataProvider,
+    RawMarketDataProvider
 };
 
 
@@ -89,41 +93,92 @@ fn ingest_data(state: &mut PIDataState, data: &PIDataPacket) -> HashMap<u64, Vec
     updated_markets
 }
 
-pub fn ingest_and_filter(state: &mut PIDataState, data: PIDataPacket) -> PIDataPacket {
-    let updated_markets: HashSet<u64> = ingest_data(state, &data).iter()
-        .map(|(k, _v)| *k)
-        .collect();
-
-    let filtered_updates: HashMap<u64, MarketData> = data.market_updates.into_iter()
-        .filter(|(k, _v)| updated_markets.contains(k))
-        .collect();
-
-    PIDataPacket { market_updates: filtered_updates }
+pub struct RawToRawMarketDataCache {
+    state: PIDataState,
+    output: ActorBuffer<PIDataPacket>
 }
 
-pub fn ingest_and_transform(state: &mut PIDataState, data: &PIDataPacket) -> Vec<DataPacket> {
-    let updated_market_constracts = ingest_data(state, data);
-    let mut output_data_packets = Vec::new();
-
-    for (&market_id, contract_ids) in updated_market_constracts.iter() {
-        let market_state = state.get_market(market_id).unwrap();
-        for &contract_id in contract_ids.iter() {
-            let contract_state = state.get_contract(contract_id).unwrap();
-            let data_packet = DataPacket {
-                timestamp:  market_state.data_ts,
-                payload: PacketPayload::PIQuote {
-                    id: contract_state.id,
-                    market_id: contract_state.market_id,
-                    name: contract_state.name.clone(), // TODO: This is inefficient
-                    market_name: market_state.name.clone(),
-                    status: contract_state.status,
-                    trade_price: contract_state.prices.trade_price,
-                    ask_price: contract_state.prices.ask_price,
-                    bid_price: contract_state.prices.bid_price,
-                }
-            };
-            output_data_packets.push(data_packet)
-        }
+impl RawToRawMarketDataCache {
+    pub fn new(state: PIDataState) -> Self {
+        RawToRawMarketDataCache { state, output: ActorBuffer::new() }
     }
-    output_data_packets
+
+    fn ingest_and_filter(&mut self, data: &PIDataPacket) -> bool {
+        let updated_markets: HashSet<u64> = ingest_data(&mut self.state, &data).iter()
+            .map(|(k, _v)| *k)
+            .collect();
+
+        let filtered_updates: HashMap<u64, MarketData> = data.market_updates.iter()
+            .filter(|(k, _v)| updated_markets.contains(k))
+            .map(|(k, v)| (*k, v.clone()))
+            .collect();
+
+        self.output.push(PIDataPacket { market_updates: filtered_updates });
+        true
+    }
+}
+
+impl RawMarketDataListener for RawToRawMarketDataCache {
+    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool {
+        self.ingest_and_filter(data)
+    }
+}
+
+impl RawMarketDataProvider for RawToRawMarketDataCache {
+    fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket> {
+        self.output.deque_ref()
+    }
+}
+
+pub struct RawMarketDataCache {
+    state: PIDataState,
+    output: ActorBuffer<DataPacket>
+}
+
+impl RawMarketDataCache {
+    pub fn new(state: PIDataState) -> Self {
+        RawMarketDataCache { state, output: ActorBuffer::with_capacity(4096) }
+    }
+
+    fn ingest_and_transform(&mut self, data: &PIDataPacket) -> usize {
+        let updated_market_constracts = ingest_data(&mut self.state, data);
+        let mut nout = 0;
+
+        for (&market_id, contract_ids) in updated_market_constracts.iter() {
+            let market_state = self.state.get_market(market_id).unwrap();
+            for &contract_id in contract_ids.iter() {
+                let contract_state = self.state.get_contract(contract_id).unwrap();
+                let data_packet = DataPacket {
+                    timestamp:  market_state.data_ts,
+                    payload: PacketPayload::PIQuote {
+                        id: contract_state.id,
+                        market_id: contract_state.market_id,
+                        name: contract_state.name.clone(), // TODO: This is inefficient
+                        market_name: market_state.name.clone(),
+                        status: contract_state.status,
+                        trade_price: contract_state.prices.trade_price,
+                        ask_price: contract_state.prices.ask_price,
+                        bid_price: contract_state.prices.bid_price,
+                    }
+                };
+                self.output.push(data_packet);
+                nout += 1
+            }
+        }
+
+        nout
+    }
+}
+
+impl RawMarketDataListener for RawMarketDataCache {
+    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool {
+        self.ingest_and_transform(data);
+        true
+    }
+}
+
+impl MarketDataProvider for RawMarketDataCache {
+    fn fetch_market_data(&mut self) -> Option<&DataPacket> {
+        self.output.deque_ref()
+    }
 }
