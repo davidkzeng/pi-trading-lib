@@ -1,33 +1,32 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
-use std::{thread, time};
+use std::io::Write;
 
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 
 use crate::base::Status;
 
-pub mod md_stream;
+pub mod md_cache;
 pub mod api_parser;
+pub mod reader;
 pub mod writer;
 
-#[derive(Debug)]
-pub struct MarketDataError(MarketDataErrorKind);
+pub use api_parser::MarketDataResult;
+pub use reader::{MarketDataLive, MarketDataSimJson};
 
-impl MarketDataError {
-    pub fn new_field_format_error(field: &str) -> Self {
-        MarketDataError(MarketDataErrorKind::FieldFormatError(field.to_owned()))
-    }
+/// Raw format for PI market data updates, matching source JSON format
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PIDataPacket {
+    pub market_updates: HashMap<u64, MarketData>,
 }
 
-#[derive(Clone, Debug)]
-pub enum MarketDataErrorKind {
-    FieldUnavailable(String),
-    FieldFormatError(String),
-    TimestampError(String),
-    JsonParseError,
-    APIUnavailable,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MarketData {
+    id: u64,
+    name: String,
+    contracts: Vec<ContractData>,
+    status: Status,
+    timestamp: DateTime<Utc>
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -40,25 +39,10 @@ pub struct ContractData {
     bid_price: f64
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MarketData {
-    id: u64,
-    name: String,
-    contracts: Vec<ContractData>,
-    status: Status,
-    timestamp: DateTime<Utc>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PIDataPacket {
-    pub market_updates: HashMap<u64, MarketData>,
-}
-
-fn write_column<W: Write, T: ToString + ?Sized>(writer: &mut W, val: Option<&T>) {
-    if let Some(v) = val {
-        writer.write(v.to_string().as_bytes()).unwrap();
-    }
-    writer.write(",".as_bytes()).unwrap();
+/// Format for PI market data updates, organized around contract updates
+pub struct DataPacket {
+    pub timestamp: DateTime<Utc>,
+    pub payload: PacketPayload
 }
 
 pub enum PacketPayload {
@@ -72,6 +56,22 @@ pub enum PacketPayload {
         bid_price: f64,
         ask_price: f64,
     }
+}
+
+pub trait MarketDataListener {
+    fn process_market_data(&mut self, data: &DataPacket) -> bool;
+}
+
+pub trait RawMarketDataListener {
+    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool;
+}
+
+pub trait MarketDataProvider {
+    fn fetch_market_data(&mut self) -> Option<&DataPacket>;
+}
+
+pub trait RawMarketDataProvider {
+    fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket>;
 }
 
 impl PacketPayload {
@@ -108,22 +108,14 @@ impl PacketPayload {
     }
 }
 
-// V2 of PIDataPacket, going for more generic, event oriented, easy to csv serialize
-pub struct DataPacket {
-    pub timestamp: DateTime<Utc>,
-    pub payload: PacketPayload
-}
-
 impl DataPacket {
     const TIMESTAMP: &'static str = "timestamp";
 
     pub fn csv_serialize<T: Write>(&self, writer: &mut T) {
         // Performance question? Is using a byte array faster?
-        let mut bytes: Vec<u8> = Vec::with_capacity(128);
-        write_column(&mut bytes, Some(&self.timestamp.timestamp_millis()));
-        self.payload.csv_serialize(&mut bytes);
-        writeln!(&mut bytes).unwrap();
-        writer.write_all(&bytes).unwrap();
+        write_column(writer, Some(&self.timestamp.timestamp_millis()));
+        self.payload.csv_serialize(writer);
+        writeln!(writer).unwrap();
     }
 
     pub fn write_header<T: Write>(writer: &mut T) {
@@ -133,113 +125,9 @@ impl DataPacket {
     }
 }
 
-pub type MarketDataResult = Result<Option<PIDataPacket>, MarketDataError>;
-pub trait MarketDataSource {
-    fn fetch_market_data(&mut self) -> MarketDataResult;
-}
-pub struct MarketDataLive {
-    retry_limit: u64
-}
-
-impl MarketDataLive {
-    pub fn new() -> Self {
-        MarketDataLive { retry_limit: 1 }
+fn write_column<W: Write, T: ToString + ?Sized>(writer: &mut W, val: Option<&T>) {
+    if let Some(v) = val {
+        writer.write_all(v.to_string().as_bytes()).unwrap();
     }
-
-    pub fn new_with_retry(retry_limit: u64) -> Self {
-        MarketDataLive { retry_limit }
-    }
-}
-
-impl MarketDataSource for MarketDataLive {
-    fn fetch_market_data(&mut self) -> MarketDataResult {
-        let mut attempts = 0;
-        loop {
-            match api_parser::fetch_api_market_data() {
-                Ok(market_data) => {
-                    break Ok(market_data);
-                },
-                Err(err) => {
-                    attempts += 1;
-                    if attempts >= self.retry_limit {
-                        break Err(err);
-                    }
-                    println!("Encountered market data error {:?}", err);
-                    println!("Sleeping for 1 second");
-                    thread::sleep(time::Duration::from_millis(1000));
-                }
-            }
-        }
-    }
-}
-
-// Delete once we remove Json from the pipeline
-pub struct MarketDataSimJson {
-    data_reader: BufReader<File>,
-    line_buffer: String
-}
-
-impl MarketDataSimJson {
-    pub fn new(filename: &str) -> Self {
-        let data_file = File::open(filename).unwrap();
-        MarketDataSimJson {
-            data_reader: BufReader::new(data_file),
-            line_buffer: String::new()
-        }
-    }
-}
-
-impl MarketDataSource for MarketDataSimJson {
-    fn fetch_market_data(&mut self) -> MarketDataResult {
-        let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
-        if bytes_read == 0 {
-            return Ok(None);
-        }
-        let market_data: PIDataPacket = serde_json::from_str(&mut self.line_buffer).unwrap();
-        self.line_buffer.clear();
-        Ok(Some(market_data))
-    }
-}
-
-pub struct MarketDataSimCsv {
-    data_reader: BufReader<File>,
-    line_buffer: String
-}
-
-impl MarketDataSimCsv {
-    pub fn new(filename: &str) -> Self {
-        let data_file = File::open(filename).unwrap();
-        MarketDataSimCsv {
-            data_reader: BufReader::new(data_file),
-            line_buffer: String::new()
-        }
-    }
-}
-
-impl MarketDataSource for MarketDataSimCsv {
-    fn fetch_market_data(&mut self) -> MarketDataResult {
-        let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
-        if bytes_read == 0 {
-            return Ok(None);
-        }
-        let market_data: PIDataPacket = serde_json::from_str(&mut self.line_buffer).unwrap();
-        self.line_buffer.clear();
-        Ok(Some(market_data))
-    }
-}
-
-pub trait MarketDataListener {
-    fn process_market_data(&mut self, data: &DataPacket) -> bool;
-}
-
-pub trait RawMarketDataListener {
-    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool;
-}
-
-pub trait MarketDataProvider {
-    fn fetch_market_data(&mut self) -> Option<&DataPacket>;
-}
-
-pub trait RawMarketDataProvider {
-    fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket>;
+    writer.write_all(",".as_bytes()).unwrap();
 }

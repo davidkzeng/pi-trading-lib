@@ -3,13 +3,13 @@ use std::env;
 
 use pi_trading_lib::market_data::{
     MarketDataSimJson,
-    MarketDataSource,
     MarketDataListener,
     RawMarketDataListener,
-    MarketDataProvider
+    MarketDataProvider,
+    RawMarketDataProvider
 };
 use pi_trading_lib::market_data::writer::DataPacketWriter;
-use pi_trading_lib::market_data::md_stream::RawMarketDataCache;
+use pi_trading_lib::market_data::md_cache::RawMarketDataCache;
 use pi_trading_lib::base::PIDataState;
 
 fn main() {
@@ -31,13 +31,12 @@ fn main() {
 
     // MarketDataSimJson -> RawMarketDataCache -> Writer
     loop {
-        let market_data = match input_market_data.fetch_market_data() {
-            Ok(Some(market_data)) => market_data,
-            Ok(None) => { break; },
-            _ => panic!()
+        let market_data = match input_market_data.fetch_raw_market_data() {
+            Some(market_data) => market_data,
+            None => { break; },
         };
        
-        market_data_cache.process_raw_market_data(&market_data);
+        market_data_cache.process_raw_market_data(market_data);
 
         while let Some(packet) = market_data_cache.fetch_market_data() {
             writer.process_market_data(packet);

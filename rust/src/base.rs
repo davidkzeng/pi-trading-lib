@@ -1,9 +1,9 @@
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
-
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+
+use chrono::{DateTime, Utc};
+use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
@@ -38,7 +38,6 @@ pub struct Market {
     pub name: String,
     pub contracts: Vec<u64>,
     pub status: Status,
-    pub data_ts: DateTime<Utc>
 }
 
 #[derive(Debug)]
@@ -47,7 +46,8 @@ pub struct Contract {
     pub name: String,
     pub market_id: u64,
     pub status: Status,
-    pub prices: ContractPrice
+    pub prices: ContractPrice,
+    pub data_ts: DateTime<Utc>
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -63,7 +63,6 @@ impl ContractPrice {
     }
 }
 
-// TODO: Define invariants
 #[derive(Debug)]
 pub struct PIDataState {
     markets: HashMap<u64, Market>,
@@ -82,7 +81,7 @@ impl PIDataState {
     pub fn get_contract(&self, id: u64) -> Option<&Contract> {
         self.contracts.get(&id)
     }
-
+    
     pub fn get_market_mut(&mut self, id: u64) -> Option<&mut Market> {
         self.markets.get_mut(&id)
     }
@@ -93,7 +92,6 @@ impl PIDataState {
 
     pub fn add_contract(&mut self, contract: Contract) {
         let market_id = contract.market_id;
-        // TODO: Replace with error, check invariants
         let market = self.markets.get_mut(&market_id).unwrap();
         market.contracts.push(contract.id);
         self.contracts.insert(contract.id, contract);
@@ -101,5 +99,9 @@ impl PIDataState {
 
     pub fn add_market(&mut self, market: Market) {
         self.markets.insert(market.id, market);
+    }
+
+    pub fn has_market(&self, id: u64) -> bool {
+        self.get_market(id).is_some()
     }
 }

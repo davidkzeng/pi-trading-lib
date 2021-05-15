@@ -10,9 +10,6 @@ use crate::market_data::{
     ContractData,
     MarketData,
     PIDataPacket,
-    MarketDataError,
-    MarketDataErrorKind,
-    MarketDataResult
 };
 
 type JsonMap = serde_json::map::Map<String, Value>;
@@ -20,6 +17,27 @@ type JsonMap = serde_json::map::Map<String, Value>;
 const TIMESTAMP_TOLERANCE_SECS : i64 = 5 * 60;
 const API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/all/";
 const MARKET_API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/markets/{}";
+
+#[derive(Debug)]
+pub struct MarketDataError(MarketDataErrorKind);
+
+impl MarketDataError {
+    pub fn new_field_format_error(field: &str) -> Self {
+        MarketDataError(MarketDataErrorKind::FieldFormatError(field.to_owned()))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum MarketDataErrorKind {
+    FieldUnavailable(String),
+    FieldFormatError(String),
+    TimestampError(String),
+    JsonParseError,
+    APIUnavailable,
+}
+
+pub type MarketDataResult = Result<Option<PIDataPacket>, MarketDataError>;
+
 
 fn get_field<'a>(map: &'a JsonMap, field: &str) -> Result<&'a Value, MarketDataError> {
     map.get(field).ok_or(MarketDataError(MarketDataErrorKind::FieldUnavailable(field.to_owned())))

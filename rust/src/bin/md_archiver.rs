@@ -3,9 +3,9 @@ use std::fs::OpenOptions;
 use std::{env, thread, time};
 use std::convert::TryInto;
 
-use pi_trading_lib::market_data::{MarketDataLive, MarketDataSource, RawMarketDataListener, RawMarketDataProvider};
+use pi_trading_lib::market_data::{MarketDataLive, RawMarketDataListener, RawMarketDataProvider};
 use pi_trading_lib::market_data::writer::PIDataPacketWriter;
-use pi_trading_lib::market_data::md_stream::RawToRawMarketDataCache;
+use pi_trading_lib::market_data::md_cache::RawToRawMarketDataCache;
 use pi_trading_lib::base::PIDataState;
 
 const API_RETRY_LIMIT: u64 = 5;
@@ -31,7 +31,7 @@ fn main() {
     let data_state = PIDataState::new();
     let mut market_data_cache = RawToRawMarketDataCache::new(data_state);
 
-    let output_file = OpenOptions::new().append(true)
+    let output_file = OpenOptions::new().append(true).create(true)
         .open(output_file_name).expect("Unable to create output file");
     let mut output_writer = PIDataPacketWriter::new(output_file);
 
