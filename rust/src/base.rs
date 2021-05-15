@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, NaiveDateTime};
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,17 +37,27 @@ pub struct Market {
     pub id: u64,
     pub name: String,
     pub contracts: Vec<u64>,
-    pub status: Status,
 }
 
+// TODO: Refactor out status into separate from contract
 #[derive(Debug)]
 pub struct Contract {
     pub id: u64,
-    pub name: String,
     pub market_id: u64,
+    pub name: String,
     pub status: Status,
     pub prices: ContractPrice,
     pub data_ts: DateTime<Utc>
+}
+
+impl Contract {
+    pub fn new(id: u64, market_id: u64, name: String) -> Self {
+        Contract {
+            id, market_id, name, status: Status::Closed, 
+            prices: ContractPrice::new(0.0, 0.0, 0.0),
+            data_ts: DateTime::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc)
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -90,18 +100,24 @@ impl PIDataState {
         self.contracts.get_mut(&id)
     }
 
-    pub fn add_contract(&mut self, contract: Contract) {
-        let market_id = contract.market_id;
+    pub fn add_contract(&mut self, id: u64, market_id: u64, name: &str) {
+        assert!(!self.has_contract(id));
+
         let market = self.markets.get_mut(&market_id).unwrap();
-        market.contracts.push(contract.id);
-        self.contracts.insert(contract.id, contract);
+        market.contracts.push(id);
+        self.contracts.insert(id, Contract::new(id, market_id, name.to_string()));
     }
 
-    pub fn add_market(&mut self, market: Market) {
-        self.markets.insert(market.id, market);
+    pub fn add_market(&mut self, id: u64, name: &str) {
+        assert!(!self.has_market(id));
+        self.markets.insert(id, Market { id, name: name.to_string(), contracts: Vec::new() });
     }
 
     pub fn has_market(&self, id: u64) -> bool {
         self.get_market(id).is_some()
+    }
+
+    pub fn has_contract(&self, id: u64) -> bool {
+        self.get_contract(id).is_some()
     }
 }

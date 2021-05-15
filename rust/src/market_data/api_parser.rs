@@ -114,6 +114,7 @@ fn get_market(market_map: &JsonMap) -> Result<MarketData, MarketDataError> {
     })
 }
 
+#[allow(dead_code)]
 pub fn fetch_market_data(id: u64) -> Result<MarketData, MarketDataError> {
     let api_address = format!("{} {}", MARKET_API_ADDRESS, id);
     let resp = ureq::get(&api_address)

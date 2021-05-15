@@ -33,7 +33,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('start_date')
     parser.add_argument('end_date')
-    parser.add_argument('data_archive')
+    parser.add_argument('--data_archive')
     parser.add_argument('--force', action='store_true')
 
     args = parser.parse_args()
@@ -41,7 +41,8 @@ def main():
     start_date = date_util.from_date_str(args.start_date)
     end_date = date_util.from_date_str(args.end_date)
 
-    pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
+    if args.data_archive:
+        pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
     for date in date_util.date_range(start_date, end_date):
         _run_converter(date, force=args.force)

@@ -6,13 +6,14 @@ use chrono::{DateTime, Utc};
 
 use crate::base::Status;
 
+mod api_parser;
 pub mod md_cache;
-pub mod api_parser;
 pub mod reader;
 pub mod writer;
 
-pub use api_parser::MarketDataResult;
-pub use reader::{MarketDataLive, MarketDataSimJson};
+pub use self::api_parser::MarketDataResult;
+#[doc(inline)]
+pub use self::reader::{MarketDataLive, MarketDataSimJson};
 
 /// Raw format for PI market data updates, matching source JSON format
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,7 +26,7 @@ pub struct MarketData {
     id: u64,
     name: String,
     contracts: Vec<ContractData>,
-    status: Status,
+    status: Status, // In practice, this is always true
     timestamp: DateTime<Utc>
 }
 
@@ -33,18 +34,20 @@ pub struct MarketData {
 pub struct ContractData {
     id: u64,
     name: String,
-    status: Status,
+    status: Status, // In practice, this is always true
     trade_price: f64,
     ask_price: f64,
     bid_price: f64
 }
 
 /// Format for PI market data updates, organized around contract updates
+#[derive(Clone)]
 pub struct DataPacket {
     pub timestamp: DateTime<Utc>,
     pub payload: PacketPayload
 }
 
+#[derive(Clone)]
 pub enum PacketPayload {
     PIQuote {
         id: u64,

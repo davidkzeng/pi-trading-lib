@@ -17,22 +17,16 @@ import pi_trading_lib.data.contracts
 
 COLUMNS = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 'trade_price', 'name']
 
-# Convenience factor, we should really be reading this from a text file in the data archive
-MISSING_MARKET_DATA = [
-    '20200917',
-    '20200922',
-    '20200923',
-    '20201008',
-    '20201012',
-    '20201103',
-    '20201104',
-    '20210403',
-    '20210413',
-]
+
+@functools.lru_cache()
+def _get_missing_market_data_days() -> t.List[str]:
+    with open(data_archive.get_data_file('bad_md_days')) as f:
+        bad_days = [line.rstrip() for line in f]
+    return bad_days
 
 
 def incomplete_market_data(date: datetime.date) -> bool:
-    return date_util.to_date_str(date) in MISSING_MARKET_DATA
+    return date_util.to_date_str(date) in _get_missing_market_data_days()
 
 
 def get_raw_data(date: datetime.date) -> pd.DataFrame:
@@ -108,6 +102,7 @@ def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ..
 def add_market_best_price(df: pd.DataFrame):
     if True:
         # Try to support this again, maybe prepopulate in rust?
+        # The current problem is that we decoupled market and contract updates
         df['best_bid_price'] = df['bid_price']
         df['best_ask_price'] = df['ask_price']
         return df

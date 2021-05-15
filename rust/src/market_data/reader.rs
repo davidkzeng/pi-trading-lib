@@ -69,4 +69,3 @@ impl RawMarketDataProvider for MarketDataSimJson {
         self.buffer.deque_ref()
     }
 }
-

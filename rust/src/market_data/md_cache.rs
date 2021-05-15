@@ -2,7 +2,7 @@ use std::collections::{HashSet, HashMap};
 
 use chrono::{DateTime, Utc};
 
-use crate::base::{PIDataState, Contract, Market, ContractPrice};
+use crate::base::{PIDataState, ContractPrice};
 use crate::actor::ActorBuffer;
 use crate::market_data::{
     ContractData,
@@ -19,16 +19,6 @@ use crate::market_data::{
 pub struct RawToRawMarketDataCache {
     state: PIDataState,
     output: ActorBuffer<PIDataPacket>
-}
-
-pub struct RawMarketDataCache {
-    state: PIDataState,
-    output: ActorBuffer<DataPacket>
-}
-
-pub struct MarketDataCache {
-    state: PIDataState,
-    output: ActorBuffer<DataPacket>
 }
 
 impl RawToRawMarketDataCache {
@@ -61,6 +51,11 @@ impl RawMarketDataProvider for RawToRawMarketDataCache {
     fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket> {
         self.output.deque_ref()
     }
+}
+
+pub struct RawMarketDataCache {
+    state: PIDataState,
+    output: ActorBuffer<DataPacket>
 }
 
 impl RawMarketDataCache {
@@ -111,9 +106,55 @@ impl MarketDataProvider for RawMarketDataCache {
     }
 }
 
+pub struct MarketDataCache {
+    state: PIDataState,
+    output: ActorBuffer<DataPacket>
+}
+
+impl MarketDataCache {
+    pub fn new(state: PIDataState) -> Self {
+        MarketDataCache { state, output: ActorBuffer::new() }
+    }
+}
+
 impl MarketDataListener for MarketDataCache {
     fn process_market_data(&mut self, data: &DataPacket) -> bool {
-        todo!()
+        let mut update = false;
+
+        match data.payload {
+            PacketPayload::PIQuote { id, market_id, status, trade_price, bid_price, ask_price, .. } => {
+                if !self.state.has_market(market_id) {
+                    self.state.add_market(market_id, "");
+                }
+
+                if !self.state.has_contract(id) {
+                    self.state.add_contract(id, market_id, "")
+                }
+
+                let contract = self.state.get_contract_mut(id).unwrap();
+
+                if contract.data_ts > data.timestamp {
+                    println!("Warning: Timestamp for contract {} went backwards from {} to {}", contract.id,
+                            contract.data_ts, data.timestamp);
+                } else {
+                    if contract.status != status {
+                        contract.status = status;
+                        update = true;
+                    }
+
+                    let new_prices = ContractPrice::new(trade_price, ask_price, bid_price);
+                    if contract.prices != new_prices {
+                        contract.prices = new_prices;
+                        update = true;
+                    }
+                }
+            }
+        }
+        
+        if update {
+            self.output.push(data.clone()); // Should we clone??
+        }
+        update
     }
 }
 
@@ -133,13 +174,7 @@ fn ingest_one_market_data(state: &mut PIDataState, market_data: &MarketData) -> 
     let market_id = market_data.id;
 
     if !state.has_market(market_id) {
-        let new_market = Market {
-            id: market_id,
-            name: market_data.name.clone(),
-            status: market_data.status,
-            contracts: Vec::new(),
-        };
-        state.add_market(new_market);
+        state.add_market(market_id, &market_data.name);
         for contract_data in &market_data.contracts {
             assert!(state.get_contract(contract_data.id).is_none());
         }
@@ -157,37 +192,29 @@ fn ingest_one_market_data(state: &mut PIDataState, market_data: &MarketData) -> 
 fn ingest_one_contract_data(state: &mut PIDataState, market_id: u64, contract_data: &ContractData, ts: DateTime<Utc>) -> bool {
     let mut update = false;
 
-    if let Some(contract) = state.get_contract_mut(contract_data.id) {
-        assert!(contract.market_id == market_id);
+    if !state.has_contract(contract_data.id) {
+        state.add_contract(contract_data.id, market_id, &contract_data.name);
+        update = true;
+    }
 
-        if contract.data_ts > ts {
-            println!("Warning: Timestamp for contract {} went backwards from {} to {}", contract.id,
-                    contract.data_ts, ts);
-            return false;
-        }
+    let contract = state.get_contract_mut(contract_data.id).unwrap();
+    assert!(contract.market_id == market_id);
 
-        if contract.status != contract_data.status {
-            contract.status = contract_data.status;
-            update = true;
-        }
+    if contract.data_ts > ts {
+        println!("Warning: Timestamp for contract {} went backwards from {} to {}", contract.id,
+                contract.data_ts, ts);
+        return false;
+    }
 
-        let new_prices = ContractPrice::new(contract_data.trade_price,
-            contract_data.ask_price, contract_data.bid_price);
-        if contract.prices != new_prices {
-            contract.prices = new_prices;
-            update = true;
-        }
-    } else {
-        let new_contract = Contract {
-            id: contract_data.id,
-            name: contract_data.name.clone(),
-            market_id,
-            status: contract_data.status,
-            prices: ContractPrice::new(contract_data.trade_price,
-                contract_data.ask_price, contract_data.bid_price),
-            data_ts: ts,
-        };
-        state.add_contract(new_contract);
+    if contract.status != contract_data.status {
+        contract.status = contract_data.status;
+        update = true;
+    }
+
+    let new_prices = ContractPrice::new(contract_data.trade_price,
+        contract_data.ask_price, contract_data.bid_price);
+    if contract.prices != new_prices {
+        contract.prices = new_prices;
         update = true;
     }
 
