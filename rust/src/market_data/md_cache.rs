@@ -2,11 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
-use crate::actor::{ActorBuffer, Provider, Listener};
+use crate::actor::{ActorBuffer, Listener, Provider};
 use crate::base::{ContractPrice, PIDataState};
-use crate::market_data::{
-    ContractData, DataPacket, MarketData, PIDataPacket, PacketPayload,
-};
+use crate::market_data::{ContractData, DataPacket, MarketData, PIDataPacket, PacketPayload};
 
 pub struct RawToRawMarketDataCache {
     state: PIDataState,
@@ -45,8 +43,8 @@ impl Listener<PIDataPacket> for RawToRawMarketDataCache {
 }
 
 impl Provider<PIDataPacket> for RawToRawMarketDataCache {
-    fn fetch(&mut self) -> Option<&PIDataPacket> {
-        self.output.deque_ref()
+    fn output_buffer(&mut self) -> &mut ActorBuffer<PIDataPacket> {
+        &mut self.output
     }
 }
 
@@ -97,13 +95,13 @@ impl Listener<PIDataPacket> for RawMarketDataCache {
 }
 
 impl Provider<DataPacket> for RawMarketDataCache {
-    fn fetch(&mut self) -> Option<&DataPacket> {
-        self.output.deque_ref()
+    fn output_buffer(&mut self) -> &mut ActorBuffer<DataPacket> {
+        &mut self.output
     }
 }
 
 pub struct MarketDataCache {
-    state: PIDataState,
+    pub state: PIDataState,
     output: ActorBuffer<DataPacket>,
 }
 
@@ -127,8 +125,57 @@ impl Listener<DataPacket> for MarketDataCache {
 }
 
 impl Provider<DataPacket> for MarketDataCache {
-    fn fetch(&mut self) -> Option<&DataPacket> {
-        self.output.deque_ref()
+    fn output_buffer(&mut self) -> &mut ActorBuffer<DataPacket> {
+        &mut self.output
+    }
+}
+
+/// Naive, memory-hungry implementation of a market data cache with delayed message processing
+///
+/// This implementation is useful for when data packet arrival rate is less than the
+/// desired sample rate (if using a sampling based method)
+pub struct DelayedMarketDataCache {
+    pub state: PIDataState,
+    delay_time: u64,
+    delay_buffer: ActorBuffer<DataPacket>,
+    output: ActorBuffer<DataPacket>,
+}
+
+impl DelayedMarketDataCache {
+    pub fn new(state: PIDataState, delay_time: u64, capacity: usize) -> Self {
+        assert!(delay_time > 0);
+        DelayedMarketDataCache {
+            state,
+            delay_time,
+            delay_buffer: ActorBuffer::with_capacity(capacity),
+            output: ActorBuffer::with_capacity(capacity),
+        }
+    }
+}
+
+impl Listener<DataPacket> for DelayedMarketDataCache {
+    fn process(&mut self, data: &DataPacket) -> bool {
+        let delay_ts = data.timestamp - (self.delay_time as i64);
+        while let Some(buf_data) = self.delay_buffer.peek() {
+            if buf_data.timestamp <= delay_ts {
+                let update = ingest_data_packet(&mut self.state, data);
+                if update {
+                    self.output.push(buf_data.clone());
+                }
+                self.delay_buffer.deque_ref();
+            } else {
+                break;
+            }
+        }
+        self.delay_buffer.push(data.clone());
+
+        true
+    }
+}
+
+impl Provider<DataPacket> for DelayedMarketDataCache {
+    fn output_buffer(&mut self) -> &mut ActorBuffer<DataPacket> {
+        &mut self.output
     }
 }
 
@@ -161,6 +208,8 @@ fn ingest_data_packet(state: &mut PIDataState, data: &DataPacket) -> bool {
                     contract.id, contract.data_ts, data.timestamp
                 );
             } else {
+                contract.data_ts = data.timestamp;
+
                 if contract.status != status {
                     contract.status = status;
                     update = true;
@@ -177,7 +226,6 @@ fn ingest_data_packet(state: &mut PIDataState, data: &DataPacket) -> bool {
 
     update
 }
-
 
 fn ingest_data(state: &mut PIDataState, data: &PIDataPacket) -> HashMap<u64, Vec<u64>> {
     let mut updated_markets = HashMap::new();
@@ -234,6 +282,8 @@ fn ingest_one_contract_data(
         return false;
     }
 
+    contract.data_ts = ts.timestamp_millis();
+
     if contract.status != contract_data.status {
         contract.status = contract_data.status;
         update = true;
@@ -250,12 +300,4 @@ fn ingest_one_contract_data(
     }
 
     update
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_true() {
-        assert_eq!("lol", "lol");
-    }
 }

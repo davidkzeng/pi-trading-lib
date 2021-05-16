@@ -1,6 +1,15 @@
-pub trait Provider<O> {
+pub trait SourceProvider<O> {
     fn fetch(&mut self) -> Option<&O>;
 }
+
+pub trait Provider<O> {
+    fn output_buffer(&mut self) -> &mut ActorBuffer<O>;
+
+    fn fetch(&mut self) -> Option<&O> {
+        self.output_buffer().deque_ref()
+    }
+}
+
 pub trait Listener<I> {
     fn process(&mut self, input: &I) -> bool;
 }
@@ -31,11 +40,11 @@ impl<T> ActorBuffer<T> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.readptr == self.writeptr
+        self.readptr >= self.writeptr
     }
 
     pub fn is_full(&self) -> bool {
-        self.readptr == self.writeptr - self.capacity
+        self.readptr + self.capacity <= self.writeptr
     }
 
     pub fn push(&mut self, val: T) {
@@ -59,9 +68,31 @@ impl<T> ActorBuffer<T> {
             Some(res)
         }
     }
+
+    pub fn peek(&self) -> Option<&T> {
+        if self.is_empty() {
+            None
+        } else {
+            Some(&self.buf[self.readptr % self.capacity])
+        }
+    }
 }
 
-pub fn drain<O, P: Provider<O>>(provider: &mut P) {
+/// Drains Provider until no more outputs remain
+pub fn drain<O, P: Provider<O>>(provider: &mut P) -> usize {
+    let mut counter = 0;
     while let Some(_) = provider.fetch() {
+        counter += 1;
     }
+    counter
+}
+
+/// Drains data from Provider to Listener until no more outputs remain
+pub fn drain_to<T, P: Provider<T>, L: Listener<T>>(provider: &mut P, listener: &mut L) -> usize {
+    let mut counter = 0;
+    while let Some(t) = provider.fetch() {
+        listener.process(t);
+        counter += 1;
+    }
+    counter
 }

@@ -137,4 +137,9 @@ impl PIDataState {
     pub fn has_contract(&self, id: u64) -> bool {
         self.get_contract(id).is_some()
     }
+
+    pub fn contract_mid_price(&self, id: u64) -> Option<f64> {
+        self.get_contract(id)
+            .map(|contract| (contract.prices.bid_price + contract.prices.ask_price) * 0.5)
+    }
 }

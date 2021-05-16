@@ -14,7 +14,7 @@ pub mod writer;
 
 pub use self::api_parser::MarketDataResult;
 #[doc(inline)]
-pub use self::reader::{MarketDataLive, MarketDataSimJson, MarketDataSimCsv};
+pub use self::reader::{MarketDataLive, MarketDataSimCsv, MarketDataSimJson};
 
 /// Raw format for PI market data updates, matching source JSON format
 #[derive(Debug, Serialize, Deserialize)]
@@ -141,6 +141,7 @@ impl DataPacket {
     pub fn csv_deserialize<T: BufRead>(reader: &mut T, buffer: &mut Vec<u8>) -> Result<Self, ()> {
         let timestamp = read_column(reader, buffer)?;
         let payload = PacketPayload::csv_deserialize(reader, buffer)?;
+        reader.read_until(b'\n', buffer).map_err(|_err| ())?;
         Ok(DataPacket { timestamp, payload })
     }
 
@@ -149,7 +150,7 @@ impl DataPacket {
         Self::write_header(&mut reference_header);
         let mut file_header: Vec<u8> = Vec::new();
         reader.read_until(b'\n', &mut file_header).unwrap();
-        file_header.pop();
+        // println!("{:?} {:?}", str::from_utf8(&reference_header), str::from_utf8(&file_header));
         reference_header == file_header
     }
 }

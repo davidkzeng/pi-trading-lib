@@ -9,3 +9,4 @@ senate_state_2020,fivethirtyeight/senate_state_2020/{date}.csv
 pres_sim_2020,fivethirtyeight/pres_sim_2020/{date}.csv
 contract_db,contract.db
 bad_md_days,market_data_raw/bad_days.txt
+sampler,sampler/{date}.csv

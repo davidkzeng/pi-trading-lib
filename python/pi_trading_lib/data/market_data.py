@@ -25,7 +25,7 @@ def _get_missing_market_data_days() -> t.List[str]:
     return bad_days
 
 
-def incomplete_market_data(date: datetime.date) -> bool:
+def bad_market_data(date: datetime.date) -> bool:
     return date_util.to_date_str(date) in _get_missing_market_data_days()
 
 

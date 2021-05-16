@@ -58,6 +58,11 @@ impl MarketDataSimJson {
 }
 
 impl Provider<PIDataPacket> for MarketDataSimJson {
+    fn output_buffer(&mut self) -> &mut ActorBuffer<PIDataPacket> {
+        // TODO: We should refactor this into "Source provider" or something
+        panic!()
+    }
+
     fn fetch(&mut self) -> Option<&PIDataPacket> {
         let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
         if bytes_read == 0 {
@@ -90,6 +95,11 @@ impl MarketDataSimCsv {
 }
 
 impl Provider<DataPacket> for MarketDataSimCsv {
+    fn output_buffer(&mut self) -> &mut ActorBuffer<DataPacket> {
+        // Refactor this to optimistaclly fill output_buffer
+        panic!()
+    }
+
     fn fetch(&mut self) -> Option<&DataPacket> {
         match DataPacket::csv_deserialize(&mut self.data_reader, &mut self.read_buffer) {
             Ok(data_packet) => {

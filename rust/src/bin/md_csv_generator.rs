@@ -1,7 +1,7 @@
 use std::env;
 use std::fs::File;
 
-use pi_trading_lib::actor::{Provider, Listener};
+use pi_trading_lib::actor::{self, Listener, Provider};
 use pi_trading_lib::base::PIDataState;
 use pi_trading_lib::market_data::md_cache::RawMarketDataCache;
 use pi_trading_lib::market_data::writer::DataPacketWriter;
@@ -34,14 +34,11 @@ fn main() {
         };
 
         market_data_cache.process(market_data);
-
-        while let Some(packet) = market_data_cache.fetch() {
-            writer.process(packet);
-            write_counter += 1;
-            if write_counter % 1000 == 0 {
-                println!("Wrote {} packets", write_counter);
-            }
+        let packets_written = actor::drain_to(&mut market_data_cache, &mut writer);
+        if (write_counter + packets_written) / 1024 > write_counter / 1024 {
+            println!("Wrote {} packets", (write_counter / 1024 + 1) * 1024);
         }
+        write_counter += packets_written;
     }
 
     println!("Wrote {} packets", write_counter);
