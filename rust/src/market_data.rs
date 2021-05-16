@@ -149,7 +149,10 @@ impl DataPacket {
 
     pub fn csv_deserialize<T: BufRead>(reader: &mut T, buffer: &mut Vec<u8>) -> Result<Self, ()> {
         let data_ts: i64 = read_column(reader, buffer)?;
-        let ts: DateTime<Utc> = DateTime::from_utc(NaiveDateTime::from_timestamp(data_ts / 1000, (data_ts % 1000 * 1000000).try_into().unwrap()), Utc);
+        let ts: DateTime<Utc> = DateTime::from_utc(
+            NaiveDateTime::from_timestamp(data_ts / 1000, (data_ts % 1000 * 1000000).try_into().unwrap()),
+            Utc
+        );
         let payload = PacketPayload::csv_deserialize(reader, buffer)?;
         Ok(DataPacket { timestamp: ts, payload })
     }
