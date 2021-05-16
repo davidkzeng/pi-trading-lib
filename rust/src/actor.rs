@@ -1,3 +1,10 @@
+pub trait Provider<O> {
+    fn fetch(&mut self) -> Option<&O>;
+}
+pub trait Listener<I> {
+    fn process(&mut self, input: &I) -> bool;
+}
+
 pub struct ActorBuffer<T> {
     buf: Vec<T>,
     capacity: usize,
@@ -51,5 +58,10 @@ impl<T> ActorBuffer<T> {
             self.readptr += 1;
             Some(res)
         }
+    }
+}
+
+pub fn drain<O, P: Provider<O>>(provider: &mut P) {
+    while let Some(_) = provider.fetch() {
     }
 }

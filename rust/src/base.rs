@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,7 +46,7 @@ pub struct Contract {
     pub name: String,
     pub status: Status,
     pub prices: ContractPrice,
-    pub data_ts: DateTime<Utc>,
+    pub data_ts: i64,
 }
 
 impl Contract {
@@ -58,7 +57,7 @@ impl Contract {
             name,
             status: Status::Closed,
             prices: ContractPrice::new(0.0, 0.0, 0.0),
-            data_ts: DateTime::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+            data_ts: 0,
         }
     }
 }

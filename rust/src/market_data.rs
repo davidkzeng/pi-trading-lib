@@ -1,9 +1,8 @@
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::io::{BufRead, Write};
 use std::str::{self, FromStr};
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::base::Status;
@@ -15,7 +14,7 @@ pub mod writer;
 
 pub use self::api_parser::MarketDataResult;
 #[doc(inline)]
-pub use self::reader::{MarketDataLive, MarketDataSimJson};
+pub use self::reader::{MarketDataLive, MarketDataSimJson, MarketDataSimCsv};
 
 /// Raw format for PI market data updates, matching source JSON format
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,7 +45,7 @@ pub struct ContractData {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DataPacket {
     // TODO: Replace this with just normal millis timestamp
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: i64,
     pub payload: PacketPayload,
 }
 
@@ -60,22 +59,6 @@ pub enum PacketPayload {
         bid_price: f64,
         ask_price: f64,
     },
-}
-
-pub trait MarketDataListener {
-    fn process_market_data(&mut self, data: &DataPacket) -> bool;
-}
-
-pub trait RawMarketDataListener {
-    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool;
-}
-
-pub trait MarketDataProvider {
-    fn fetch_market_data(&mut self) -> Option<&DataPacket>;
-}
-
-pub trait RawMarketDataProvider {
-    fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket>;
 }
 
 impl PacketPayload {
@@ -144,7 +127,7 @@ impl DataPacket {
 
     pub fn csv_serialize<T: Write>(&self, writer: &mut T) {
         // Performance question? Is using a byte array faster?
-        write_column(writer, Some(&self.timestamp.timestamp_millis()));
+        write_column(writer, Some(&self.timestamp));
         self.payload.csv_serialize(writer);
         writeln!(writer).unwrap();
     }
@@ -156,13 +139,9 @@ impl DataPacket {
     }
 
     pub fn csv_deserialize<T: BufRead>(reader: &mut T, buffer: &mut Vec<u8>) -> Result<Self, ()> {
-        let data_ts: i64 = read_column(reader, buffer)?;
-        let ts: DateTime<Utc> = DateTime::from_utc(
-            NaiveDateTime::from_timestamp(data_ts / 1000, (data_ts % 1000 * 1000000).try_into().unwrap()),
-            Utc,
-        );
+        let timestamp = read_column(reader, buffer)?;
         let payload = PacketPayload::csv_deserialize(reader, buffer)?;
-        Ok(DataPacket { timestamp: ts, payload })
+        Ok(DataPacket { timestamp, payload })
     }
 
     pub fn check_header<T: BufRead>(reader: &mut T) -> bool {
@@ -211,8 +190,6 @@ mod test {
 
     use std::io::BufReader;
 
-    use chrono::TimeZone;
-
     #[test]
     fn test_print_data_packet_size() {
         println!("{}", DataPacket::MAX_SIZE);
@@ -221,7 +198,7 @@ mod test {
     #[test]
     fn test_ser_de_packet() {
         let data_packet = DataPacket {
-            timestamp: Utc.ymd(2021, 1, 1).and_hms(1, 0, 0),
+            timestamp: 1609462800000,
             payload: PacketPayload::PIQuote {
                 id: 1,
                 market_id: 2,

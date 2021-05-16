@@ -2,11 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
-use crate::actor::ActorBuffer;
+use crate::actor::{ActorBuffer, Provider, Listener};
 use crate::base::{ContractPrice, PIDataState};
 use crate::market_data::{
-    ContractData, DataPacket, MarketData, MarketDataListener, MarketDataProvider, PIDataPacket, PacketPayload,
-    RawMarketDataListener, RawMarketDataProvider,
+    ContractData, DataPacket, MarketData, PIDataPacket, PacketPayload,
 };
 
 pub struct RawToRawMarketDataCache {
@@ -39,14 +38,14 @@ impl RawToRawMarketDataCache {
     }
 }
 
-impl RawMarketDataListener for RawToRawMarketDataCache {
-    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool {
+impl Listener<PIDataPacket> for RawToRawMarketDataCache {
+    fn process(&mut self, data: &PIDataPacket) -> bool {
         self.ingest_and_filter(data)
     }
 }
 
-impl RawMarketDataProvider for RawToRawMarketDataCache {
-    fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket> {
+impl Provider<PIDataPacket> for RawToRawMarketDataCache {
+    fn fetch(&mut self) -> Option<&PIDataPacket> {
         self.output.deque_ref()
     }
 }
@@ -75,7 +74,7 @@ impl RawMarketDataCache {
                     timestamp: contract_state.data_ts,
                     payload: PacketPayload::PIQuote {
                         id: contract_state.id,
-                        market_id: market_id,
+                        market_id,
                         status: contract_state.status,
                         trade_price: contract_state.prices.trade_price,
                         ask_price: contract_state.prices.ask_price,
@@ -91,15 +90,14 @@ impl RawMarketDataCache {
     }
 }
 
-impl RawMarketDataListener for RawMarketDataCache {
-    fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool {
-        self.ingest_and_transform(data);
-        true
+impl Listener<PIDataPacket> for RawMarketDataCache {
+    fn process(&mut self, data: &PIDataPacket) -> bool {
+        self.ingest_and_transform(data) > 0
     }
 }
 
-impl MarketDataProvider for RawMarketDataCache {
-    fn fetch_market_data(&mut self) -> Option<&DataPacket> {
+impl Provider<DataPacket> for RawMarketDataCache {
+    fn fetch(&mut self) -> Option<&DataPacket> {
         self.output.deque_ref()
     }
 }
@@ -118,50 +116,9 @@ impl MarketDataCache {
     }
 }
 
-impl MarketDataListener for MarketDataCache {
-    fn process_market_data(&mut self, data: &DataPacket) -> bool {
-        let mut update = false;
-
-        match data.payload {
-            PacketPayload::PIQuote {
-                id,
-                market_id,
-                status,
-                trade_price,
-                bid_price,
-                ask_price,
-                ..
-            } => {
-                if !self.state.has_market(market_id) {
-                    self.state.add_market(market_id, "");
-                }
-
-                if !self.state.has_contract(id) {
-                    self.state.add_contract(id, market_id, "")
-                }
-
-                let contract = self.state.get_contract_mut(id).unwrap();
-
-                if contract.data_ts > data.timestamp {
-                    println!(
-                        "Warning: Timestamp for contract {} went backwards from {} to {}",
-                        contract.id, contract.data_ts, data.timestamp
-                    );
-                } else {
-                    if contract.status != status {
-                        contract.status = status;
-                        update = true;
-                    }
-
-                    let new_prices = ContractPrice::new(trade_price, ask_price, bid_price);
-                    if contract.prices != new_prices {
-                        contract.prices = new_prices;
-                        update = true;
-                    }
-                }
-            }
-        }
-
+impl Listener<DataPacket> for MarketDataCache {
+    fn process(&mut self, data: &DataPacket) -> bool {
+        let update = ingest_data_packet(&mut self.state, data);
         if update {
             self.output.push(data.clone());
         }
@@ -169,11 +126,58 @@ impl MarketDataListener for MarketDataCache {
     }
 }
 
-impl MarketDataProvider for MarketDataCache {
-    fn fetch_market_data(&mut self) -> Option<&DataPacket> {
+impl Provider<DataPacket> for MarketDataCache {
+    fn fetch(&mut self) -> Option<&DataPacket> {
         self.output.deque_ref()
     }
 }
+
+fn ingest_data_packet(state: &mut PIDataState, data: &DataPacket) -> bool {
+    let mut update = false;
+
+    match data.payload {
+        PacketPayload::PIQuote {
+            id,
+            market_id,
+            status,
+            trade_price,
+            bid_price,
+            ask_price,
+            ..
+        } => {
+            if !state.has_market(market_id) {
+                state.add_market(market_id, "");
+            }
+
+            if !state.has_contract(id) {
+                state.add_contract(id, market_id, "")
+            }
+
+            let contract = state.get_contract_mut(id).unwrap();
+
+            if contract.data_ts > data.timestamp {
+                println!(
+                    "Warning: Timestamp for contract {} went backwards from {} to {}",
+                    contract.id, contract.data_ts, data.timestamp
+                );
+            } else {
+                if contract.status != status {
+                    contract.status = status;
+                    update = true;
+                }
+
+                let new_prices = ContractPrice::new(trade_price, ask_price, bid_price);
+                if contract.prices != new_prices {
+                    contract.prices = new_prices;
+                    update = true;
+                }
+            }
+        }
+    }
+
+    update
+}
+
 
 fn ingest_data(state: &mut PIDataState, data: &PIDataPacket) -> HashMap<u64, Vec<u64>> {
     let mut updated_markets = HashMap::new();
@@ -222,7 +226,7 @@ fn ingest_one_contract_data(
     let contract = state.get_contract_mut(contract_data.id).unwrap();
     assert!(contract.market_id == market_id);
 
-    if contract.data_ts > ts {
+    if contract.data_ts > ts.timestamp_millis() {
         println!(
             "Warning: Timestamp for contract {} went backwards from {} to {}",
             contract.id, contract.data_ts, ts

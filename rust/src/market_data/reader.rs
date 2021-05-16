@@ -2,9 +2,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::{thread, time};
 
-use crate::actor::ActorBuffer;
+use crate::actor::{ActorBuffer, Provider};
 use crate::market_data::api_parser;
-use crate::market_data::{DataPacket, MarketDataProvider, MarketDataResult, PIDataPacket, RawMarketDataProvider};
+use crate::market_data::{DataPacket, MarketDataResult, PIDataPacket};
 
 pub struct MarketDataLive {
     retry_limit: u64,
@@ -57,8 +57,8 @@ impl MarketDataSimJson {
     }
 }
 
-impl RawMarketDataProvider for MarketDataSimJson {
-    fn fetch_raw_market_data(&mut self) -> Option<&PIDataPacket> {
+impl Provider<PIDataPacket> for MarketDataSimJson {
+    fn fetch(&mut self) -> Option<&PIDataPacket> {
         let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
         if bytes_read == 0 {
             return None;
@@ -89,8 +89,8 @@ impl MarketDataSimCsv {
     }
 }
 
-impl MarketDataProvider for MarketDataSimCsv {
-    fn fetch_market_data(&mut self) -> Option<&DataPacket> {
+impl Provider<DataPacket> for MarketDataSimCsv {
+    fn fetch(&mut self) -> Option<&DataPacket> {
         match DataPacket::csv_deserialize(&mut self.data_reader, &mut self.read_buffer) {
             Ok(data_packet) => {
                 self.buffer.push(data_packet);

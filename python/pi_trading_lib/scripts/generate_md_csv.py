@@ -1,10 +1,12 @@
 import os
 import argparse
 import subprocess
+import logging
 
 import pi_trading_lib.date_util as date_util
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
+import pi_trading_lib.logging
 
 
 def _run_converter(date, force=False):
@@ -13,20 +15,23 @@ def _run_converter(date, force=False):
     output_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_csv', {'date': date_str})
 
     if not os.path.exists(input_uri):
-        raise Exception(f'Could not find input for date {date} at uri {input_uri}')
+        logging.info(f'Could not find input for date {date} at uri {input_uri}')
+        return
 
     if os.path.exists(output_uri) and not force:
-        print(f'Skipping existing output file for date {date} at uri {output_uri}')
+        logging.info(f'Skipping existing output file for date {date} at uri {output_uri}')
         return
 
     os.makedirs(os.path.dirname(output_uri), exist_ok=True)
 
-    print(f'Running convert for date {date}')
-    subprocess.check_call([
+    logging.info(f'Running convert for date {date}')
+    cmd = [
         os.path.join(pi_trading_lib.utils.get_rust_bin_dir(), 'md_csv_generator'),
         input_uri,
         output_uri,
-    ])
+    ]
+    logging.debug(' '.join(cmd))
+    subprocess.check_call(cmd)
 
 
 def main():
@@ -35,8 +40,12 @@ def main():
     parser.add_argument('end_date')
     parser.add_argument('--data_archive')
     parser.add_argument('--force', action='store_true')
+    parser.add_argument('--verbose', action='store_true')
 
     args = parser.parse_args()
+
+    if args.verbose:
+        pi_trading_lib.logging.init_logging(logging.DEBUG)
 
     start_date = date_util.from_date_str(args.start_date)
     end_date = date_util.from_date_str(args.end_date)

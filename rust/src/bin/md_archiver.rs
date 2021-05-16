@@ -3,10 +3,11 @@ use std::fs::OpenOptions;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, thread, time};
 
+use pi_trading_lib::actor::{Listener, Provider};
 use pi_trading_lib::base::PIDataState;
 use pi_trading_lib::market_data::md_cache::RawToRawMarketDataCache;
 use pi_trading_lib::market_data::writer::PIDataPacketWriter;
-use pi_trading_lib::market_data::{MarketDataLive, RawMarketDataListener, RawMarketDataProvider};
+use pi_trading_lib::market_data::MarketDataLive;
 
 const API_RETRY_LIMIT: u64 = 5;
 const POLL_INTERVAL_SECS: u64 = 60; // PredictIt API update rate
@@ -55,9 +56,9 @@ fn main() {
 
         match api_market_data.fetch_market_data() {
             Ok(Some(market_data)) => {
-                market_data_cache.process_raw_market_data(&market_data);
-                if let Some(updated_market_data) = market_data_cache.fetch_raw_market_data() {
-                    output_writer.process_raw_market_data(updated_market_data);
+                market_data_cache.process(&market_data);
+                if let Some(updated_market_data) = market_data_cache.fetch() {
+                    output_writer.process(updated_market_data);
                 }
             }
             Ok(None) => panic!("Current live md implementation should always return market data"),
