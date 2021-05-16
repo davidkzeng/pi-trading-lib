@@ -1,42 +1,40 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
-use crate::base::{PIDataState, ContractPrice};
 use crate::actor::ActorBuffer;
+use crate::base::{ContractPrice, PIDataState};
 use crate::market_data::{
-    ContractData,
-    MarketData,
-    PIDataPacket,
-    DataPacket,
-    PacketPayload,
-    MarketDataListener,
-    RawMarketDataListener,
-    MarketDataProvider,
-    RawMarketDataProvider
+    ContractData, DataPacket, MarketData, MarketDataListener, MarketDataProvider, PIDataPacket, PacketPayload,
+    RawMarketDataListener, RawMarketDataProvider,
 };
 
 pub struct RawToRawMarketDataCache {
     state: PIDataState,
-    output: ActorBuffer<PIDataPacket>
+    output: ActorBuffer<PIDataPacket>,
 }
 
 impl RawToRawMarketDataCache {
     pub fn new(state: PIDataState) -> Self {
-        RawToRawMarketDataCache { state, output: ActorBuffer::new() }
+        RawToRawMarketDataCache {
+            state,
+            output: ActorBuffer::new(),
+        }
     }
 
     fn ingest_and_filter(&mut self, data: &PIDataPacket) -> bool {
-        let updated_markets: HashSet<u64> = ingest_data(&mut self.state, &data).iter()
-            .map(|(k, _v)| *k)
-            .collect();
+        let updated_markets: HashSet<u64> = ingest_data(&mut self.state, &data).iter().map(|(k, _v)| *k).collect();
 
-        let filtered_updates: HashMap<u64, MarketData> = data.market_updates.iter()
+        let filtered_updates: HashMap<u64, MarketData> = data
+            .market_updates
+            .iter()
             .filter(|(k, _v)| updated_markets.contains(k))
             .map(|(k, v)| (*k, v.clone()))
             .collect();
 
-        self.output.push(PIDataPacket { market_updates: filtered_updates });
+        self.output.push(PIDataPacket {
+            market_updates: filtered_updates,
+        });
         true
     }
 }
@@ -55,12 +53,15 @@ impl RawMarketDataProvider for RawToRawMarketDataCache {
 
 pub struct RawMarketDataCache {
     state: PIDataState,
-    output: ActorBuffer<DataPacket>
+    output: ActorBuffer<DataPacket>,
 }
 
 impl RawMarketDataCache {
     pub fn new(state: PIDataState) -> Self {
-        RawMarketDataCache { state, output: ActorBuffer::with_capacity(4096) }
+        RawMarketDataCache {
+            state,
+            output: ActorBuffer::with_capacity(4096),
+        }
     }
 
     fn ingest_and_transform(&mut self, data: &PIDataPacket) -> usize {
@@ -71,7 +72,7 @@ impl RawMarketDataCache {
             for &contract_id in contract_ids.iter() {
                 let contract_state = self.state.get_contract(contract_id).unwrap();
                 let data_packet = DataPacket {
-                    timestamp:  contract_state.data_ts,
+                    timestamp: contract_state.data_ts,
                     payload: PacketPayload::PIQuote {
                         id: contract_state.id,
                         market_id: market_id,
@@ -79,7 +80,7 @@ impl RawMarketDataCache {
                         trade_price: contract_state.prices.trade_price,
                         ask_price: contract_state.prices.ask_price,
                         bid_price: contract_state.prices.bid_price,
-                    }
+                    },
                 };
                 self.output.push(data_packet);
                 nout += 1
@@ -105,12 +106,15 @@ impl MarketDataProvider for RawMarketDataCache {
 
 pub struct MarketDataCache {
     state: PIDataState,
-    output: ActorBuffer<DataPacket>
+    output: ActorBuffer<DataPacket>,
 }
 
 impl MarketDataCache {
     pub fn new(state: PIDataState) -> Self {
-        MarketDataCache { state, output: ActorBuffer::new() }
+        MarketDataCache {
+            state,
+            output: ActorBuffer::new(),
+        }
     }
 }
 
@@ -119,7 +123,15 @@ impl MarketDataListener for MarketDataCache {
         let mut update = false;
 
         match data.payload {
-            PacketPayload::PIQuote { id, market_id, status, trade_price, bid_price, ask_price, .. } => {
+            PacketPayload::PIQuote {
+                id,
+                market_id,
+                status,
+                trade_price,
+                bid_price,
+                ask_price,
+                ..
+            } => {
                 if !self.state.has_market(market_id) {
                     self.state.add_market(market_id, "");
                 }
@@ -131,8 +143,10 @@ impl MarketDataListener for MarketDataCache {
                 let contract = self.state.get_contract_mut(id).unwrap();
 
                 if contract.data_ts > data.timestamp {
-                    println!("Warning: Timestamp for contract {} went backwards from {} to {}", contract.id,
-                            contract.data_ts, data.timestamp);
+                    println!(
+                        "Warning: Timestamp for contract {} went backwards from {} to {}",
+                        contract.id, contract.data_ts, data.timestamp
+                    );
                 } else {
                     if contract.status != status {
                         contract.status = status;
@@ -147,7 +161,7 @@ impl MarketDataListener for MarketDataCache {
                 }
             }
         }
-        
+
         if update {
             self.output.push(data.clone());
         }
@@ -164,7 +178,7 @@ impl MarketDataProvider for MarketDataCache {
 fn ingest_data(state: &mut PIDataState, data: &PIDataPacket) -> HashMap<u64, Vec<u64>> {
     let mut updated_markets = HashMap::new();
     for (&market_id, market_data) in data.market_updates.iter() {
-        let market_updates = ingest_one_market_data(state,market_data);
+        let market_updates = ingest_one_market_data(state, market_data);
         if market_updates.len() > 0 {
             updated_markets.insert(market_id, market_updates);
         }
@@ -192,7 +206,12 @@ fn ingest_one_market_data(state: &mut PIDataState, market_data: &MarketData) -> 
     updated_contracts
 }
 
-fn ingest_one_contract_data(state: &mut PIDataState, market_id: u64, contract_data: &ContractData, ts: DateTime<Utc>) -> bool {
+fn ingest_one_contract_data(
+    state: &mut PIDataState,
+    market_id: u64,
+    contract_data: &ContractData,
+    ts: DateTime<Utc>,
+) -> bool {
     let mut update = false;
 
     if !state.has_contract(contract_data.id) {
@@ -204,8 +223,10 @@ fn ingest_one_contract_data(state: &mut PIDataState, market_id: u64, contract_da
     assert!(contract.market_id == market_id);
 
     if contract.data_ts > ts {
-        println!("Warning: Timestamp for contract {} went backwards from {} to {}", contract.id,
-                contract.data_ts, ts);
+        println!(
+            "Warning: Timestamp for contract {} went backwards from {} to {}",
+            contract.id, contract.data_ts, ts
+        );
         return false;
     }
 
@@ -214,8 +235,11 @@ fn ingest_one_contract_data(state: &mut PIDataState, market_id: u64, contract_da
         update = true;
     }
 
-    let new_prices = ContractPrice::new(contract_data.trade_price,
-        contract_data.ask_price, contract_data.bid_price);
+    let new_prices = ContractPrice::new(
+        contract_data.trade_price,
+        contract_data.ask_price,
+        contract_data.bid_price,
+    );
     if contract.prices != new_prices {
         contract.prices = new_prices;
         update = true;

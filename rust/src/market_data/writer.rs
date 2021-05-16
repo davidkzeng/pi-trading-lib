@@ -1,14 +1,9 @@
 use std::io::{BufWriter, Write};
 
-use crate::market_data::{
-    PIDataPacket,
-    DataPacket,
-    MarketDataListener,
-    RawMarketDataListener
-};
+use crate::market_data::{DataPacket, MarketDataListener, PIDataPacket, RawMarketDataListener};
 
 pub struct DataPacketWriter<W: Write> {
-    output_writer: BufWriter<W>
+    output_writer: BufWriter<W>,
 }
 
 impl<W: Write> DataPacketWriter<W> {
@@ -27,7 +22,7 @@ impl<W: Write> MarketDataListener for DataPacketWriter<W> {
 }
 
 pub struct PIDataPacketWriter<W: Write> {
-    output_writer: BufWriter<W>
+    output_writer: BufWriter<W>,
 }
 
 impl<W: Write> PIDataPacketWriter<W> {
@@ -44,8 +39,12 @@ impl<W: Write> PIDataPacketWriter<W> {
 impl<W: Write> RawMarketDataListener for PIDataPacketWriter<W> {
     fn process_raw_market_data(&mut self, data: &PIDataPacket) -> bool {
         let update_data_json = serde_json::to_string(data).unwrap();
-        self.output_writer.write_all(update_data_json.as_bytes()).expect("Unable to write data");
-        self.output_writer.write_all("\n".as_bytes()).expect("Unable to write new line");
+        self.output_writer
+            .write_all(update_data_json.as_bytes())
+            .expect("Unable to write data");
+        self.output_writer
+            .write_all("\n".as_bytes())
+            .expect("Unable to write new line");
         true
     }
 }

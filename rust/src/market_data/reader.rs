@@ -1,10 +1,10 @@
 use std::fs::File;
-use std::{thread, time};
 use std::io::{BufRead, BufReader};
+use std::{thread, time};
 
 use crate::actor::ActorBuffer;
 use crate::market_data::api_parser;
-use crate::market_data::{PIDataPacket, DataPacket, RawMarketDataProvider, MarketDataResult, MarketDataProvider};
+use crate::market_data::{DataPacket, MarketDataProvider, MarketDataResult, PIDataPacket, RawMarketDataProvider};
 
 pub struct MarketDataLive {
     retry_limit: u64,
@@ -25,7 +25,7 @@ impl MarketDataLive {
             match api_parser::fetch_api_market_data() {
                 Ok(market_data) => {
                     break Ok(market_data);
-                },
+                }
                 Err(err) => {
                     attempts += 1;
                     if attempts >= self.retry_limit {
@@ -43,7 +43,7 @@ impl MarketDataLive {
 pub struct MarketDataSimJson {
     data_reader: BufReader<File>,
     line_buffer: String,
-    buffer: ActorBuffer<PIDataPacket>
+    buffer: ActorBuffer<PIDataPacket>,
 }
 
 impl MarketDataSimJson {
@@ -72,7 +72,7 @@ impl RawMarketDataProvider for MarketDataSimJson {
 pub struct MarketDataSimCsv {
     data_reader: BufReader<File>,
     read_buffer: Vec<u8>,
-    buffer: ActorBuffer<DataPacket>
+    buffer: ActorBuffer<DataPacket>,
 }
 
 impl MarketDataSimCsv {
@@ -95,7 +95,7 @@ impl MarketDataProvider for MarketDataSimCsv {
             Ok(data_packet) => {
                 self.buffer.push(data_packet);
                 self.buffer.deque_ref()
-            },
+            }
             Err(_) => None, // ???
         }
     }

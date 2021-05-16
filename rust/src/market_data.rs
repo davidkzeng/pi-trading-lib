@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::io::{Write, BufRead};
-use std::str::{self, FromStr};
 use std::convert::TryInto;
+use std::io::{BufRead, Write};
+use std::str::{self, FromStr};
 
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc, NaiveDateTime};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use crate::base::Status;
 
@@ -29,7 +29,7 @@ pub struct MarketData {
     name: String,
     contracts: Vec<ContractData>,
     status: Status, // In practice, this is always true
-    timestamp: DateTime<Utc>
+    timestamp: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -39,7 +39,7 @@ pub struct ContractData {
     status: Status, // In practice, this is always true
     trade_price: f64,
     ask_price: f64,
-    bid_price: f64
+    bid_price: f64,
 }
 
 /// Format for PI market data updates, organized around contract updates
@@ -47,7 +47,7 @@ pub struct ContractData {
 pub struct DataPacket {
     // TODO: Replace this with just normal millis timestamp
     pub timestamp: DateTime<Utc>,
-    pub payload: PacketPayload
+    pub payload: PacketPayload,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -59,7 +59,7 @@ pub enum PacketPayload {
         trade_price: f64,
         bid_price: f64,
         ask_price: f64,
-    }
+    },
 }
 
 pub trait MarketDataListener {
@@ -89,7 +89,15 @@ impl PacketPayload {
 
     pub fn csv_serialize<T: Write>(&self, write_buf: &mut T) {
         match self {
-            PacketPayload::PIQuote { id, market_id, status, trade_price, ask_price, bid_price, .. } => {
+            PacketPayload::PIQuote {
+                id,
+                market_id,
+                status,
+                trade_price,
+                ask_price,
+                bid_price,
+                ..
+            } => {
                 write_column(write_buf, Some("piquote"));
                 write_column(write_buf, Some(id));
                 write_column(write_buf, Some(market_id));
@@ -151,7 +159,7 @@ impl DataPacket {
         let data_ts: i64 = read_column(reader, buffer)?;
         let ts: DateTime<Utc> = DateTime::from_utc(
             NaiveDateTime::from_timestamp(data_ts / 1000, (data_ts % 1000 * 1000000).try_into().unwrap()),
-            Utc
+            Utc,
         );
         let payload = PacketPayload::csv_deserialize(reader, buffer)?;
         Ok(DataPacket { timestamp: ts, payload })
@@ -180,7 +188,10 @@ fn read_column<R: BufRead, T: FromStr>(reader: &mut R, buffer: &mut Vec<u8>) -> 
     if buffer.is_empty() {
         Err(())
     } else {
-        str::from_utf8(&buffer[..buffer.len() - 1]).unwrap().parse().map_err(|_err| ())
+        str::from_utf8(&buffer[..buffer.len() - 1])
+            .unwrap()
+            .parse()
+            .map_err(|_err| ())
     }
 }
 
@@ -211,15 +222,22 @@ mod test {
     fn test_ser_de_packet() {
         let data_packet = DataPacket {
             timestamp: Utc.ymd(2021, 1, 1).and_hms(1, 0, 0),
-            payload: PacketPayload::PIQuote { 
-                id: 1, market_id: 2, status: Status::Open, 
-                trade_price: 0.1, bid_price: 0.2, ask_price: 0.3
-            }
+            payload: PacketPayload::PIQuote {
+                id: 1,
+                market_id: 2,
+                status: Status::Open,
+                trade_price: 0.1,
+                bid_price: 0.2,
+                ask_price: 0.3,
+            },
         };
-        
+
         let mut write_buf = Vec::with_capacity(DataPacket::MAX_SER_SIZE);
         data_packet.csv_serialize(&mut write_buf);
-        assert_eq!(str::from_utf8(&write_buf[..]).unwrap(), "1609462800000,piquote,1,2,OPEN,0.1,0.2,0.3,\n");
+        assert_eq!(
+            str::from_utf8(&write_buf[..]).unwrap(),
+            "1609462800000,piquote,1,2,OPEN,0.1,0.2,0.3,\n"
+        );
 
         let mut write_buf_reader = BufReader::new(&write_buf[..]);
         let mut read_buf = Vec::with_capacity(DataPacket::MAX_SER_SIZE);

@@ -1,16 +1,12 @@
-use std::fs::File;
 use std::env;
+use std::fs::File;
 
-use pi_trading_lib::market_data::{
-    MarketDataSimJson,
-    MarketDataListener,
-    RawMarketDataListener,
-    MarketDataProvider,
-    RawMarketDataProvider
-};
-use pi_trading_lib::market_data::writer::DataPacketWriter;
-use pi_trading_lib::market_data::md_cache::RawMarketDataCache;
 use pi_trading_lib::base::PIDataState;
+use pi_trading_lib::market_data::md_cache::RawMarketDataCache;
+use pi_trading_lib::market_data::writer::DataPacketWriter;
+use pi_trading_lib::market_data::{
+    MarketDataListener, MarketDataProvider, MarketDataSimJson, RawMarketDataListener, RawMarketDataProvider,
+};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -26,16 +22,18 @@ fn main() {
 
     let data_state = PIDataState::new();
     let mut market_data_cache = RawMarketDataCache::new(data_state);
-    
+
     let mut write_counter = 0;
 
     // MarketDataSimJson -> RawMarketDataCache -> Writer
     loop {
         let market_data = match input_market_data.fetch_raw_market_data() {
             Some(market_data) => market_data,
-            None => { break; },
+            None => {
+                break;
+            }
         };
-       
+
         market_data_cache.process_raw_market_data(market_data);
 
         while let Some(packet) = market_data_cache.fetch_market_data() {

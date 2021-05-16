@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc, NaiveDateTime};
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
     Open,
-    Closed
+    Closed,
 }
 
 impl fmt::Display for Status {
@@ -47,15 +47,18 @@ pub struct Contract {
     pub name: String,
     pub status: Status,
     pub prices: ContractPrice,
-    pub data_ts: DateTime<Utc>
+    pub data_ts: DateTime<Utc>,
 }
 
 impl Contract {
     pub fn new(id: u64, market_id: u64, name: String) -> Self {
         Contract {
-            id, market_id, name, status: Status::Closed, 
+            id,
+            market_id,
+            name,
+            status: Status::Closed,
             prices: ContractPrice::new(0.0, 0.0, 0.0),
-            data_ts: DateTime::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc)
+            data_ts: DateTime::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
         }
     }
 }
@@ -64,12 +67,16 @@ impl Contract {
 pub struct ContractPrice {
     pub trade_price: f64,
     pub ask_price: f64,
-    pub bid_price: f64
+    pub bid_price: f64,
 }
 
 impl ContractPrice {
     pub fn new(trade_price: f64, ask_price: f64, bid_price: f64) -> Self {
-        ContractPrice { trade_price, ask_price, bid_price }
+        ContractPrice {
+            trade_price,
+            ask_price,
+            bid_price,
+        }
     }
 }
 
@@ -81,7 +88,10 @@ pub struct PIDataState {
 
 impl PIDataState {
     pub fn new() -> Self {
-        PIDataState { markets: HashMap::new(), contracts: HashMap::new() }
+        PIDataState {
+            markets: HashMap::new(),
+            contracts: HashMap::new(),
+        }
     }
 
     pub fn get_market(&self, id: u64) -> Option<&Market> {
@@ -91,7 +101,7 @@ impl PIDataState {
     pub fn get_contract(&self, id: u64) -> Option<&Contract> {
         self.contracts.get(&id)
     }
-    
+
     pub fn get_market_mut(&mut self, id: u64) -> Option<&mut Market> {
         self.markets.get_mut(&id)
     }
@@ -105,12 +115,20 @@ impl PIDataState {
 
         let market = self.markets.get_mut(&market_id).unwrap();
         market.contracts.push(id);
-        self.contracts.insert(id, Contract::new(id, market_id, name.to_string()));
+        self.contracts
+            .insert(id, Contract::new(id, market_id, name.to_string()));
     }
 
     pub fn add_market(&mut self, id: u64, name: &str) {
         assert!(!self.has_market(id));
-        self.markets.insert(id, Market { id, name: name.to_string(), contracts: Vec::new() });
+        self.markets.insert(
+            id,
+            Market {
+                id,
+                name: name.to_string(),
+                contracts: Vec::new(),
+            },
+        );
     }
 
     pub fn has_market(&self, id: u64) -> bool {

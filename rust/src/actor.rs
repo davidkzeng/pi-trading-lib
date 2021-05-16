@@ -2,7 +2,7 @@ pub struct ActorBuffer<T> {
     buf: Vec<T>,
     capacity: usize,
     readptr: usize,
-    writeptr: usize
+    writeptr: usize,
 }
 
 pub const DEFAULT_BUFFER_SIZE: usize = 1024;
@@ -15,7 +15,12 @@ impl<T> ActorBuffer<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         let mut buf: Vec<T> = Vec::new();
         buf.reserve(capacity);
-        ActorBuffer { buf, capacity, readptr: 0, writeptr: 0 }
+        ActorBuffer {
+            buf,
+            capacity,
+            readptr: 0,
+            writeptr: 0,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -27,7 +32,9 @@ impl<T> ActorBuffer<T> {
     }
 
     pub fn push(&mut self, val: T) {
-        if self.is_full() { panic!() }
+        if self.is_full() {
+            panic!()
+        }
         if self.writeptr < self.capacity {
             self.buf.push(val)
         } else {
