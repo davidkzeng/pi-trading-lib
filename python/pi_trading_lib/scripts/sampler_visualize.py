@@ -13,8 +13,10 @@ import pi_trading_lib.date_util as date_util
 import pi_trading_lib.data.market_data
 import pi_trading_lib.utils
 
+
 def rand_small():
     return random.random() * 0.01 - 0.005
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -48,14 +50,14 @@ def main():
     df['rand'] = df.apply(lambda row: rand_small(), axis=1)
     df['rand2'] = df.apply(lambda row: rand_small(), axis=1)
 
-    df = df[(df['tick'] - df['back']) > 0.04]
+    df = df[(df['tick'] - df['back']) > 0.06]
     x, y = (df['tick'] - df['back'] + df['rand']).to_numpy(), (df['forward'] - df['tick'] + df['rand2']).to_numpy()
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
     print(slope, intercept, r_value)
 
     line = slope * x + intercept
     fig = go.Figure(data=[
-        go.Scattergl(x=x, y=y, mode='markers'),
+        go.Scattergl(x=x, y=y, text=df['id'], mode='markers'),
         go.Scattergl(x=x, y=line, mode='lines')
     ])
     fig.show()

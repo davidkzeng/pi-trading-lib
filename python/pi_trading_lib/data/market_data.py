@@ -3,8 +3,6 @@ import os.path
 import logging
 import datetime
 import functools
-from collections import namedtuple
-from abc import abstractmethod
 
 import pandas as pd
 
@@ -155,38 +153,3 @@ def get_df(start_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
     df = add_market_best_price(df)
     df = add_mid_price(df)
     return df
-
-
-MarketDataEntry = namedtuple('MarketDataEntry', ['timestamp', 'cid', 'price'])
-
-
-class MarketDataProvider:
-    @abstractmethod
-    def next(self) -> t.Optional[MarketDataEntry]:
-        pass
-
-    @abstractmethod
-    def peek_timestamp(self) -> t.Optional[int]:
-        pass
-
-
-class DataFrameProvider(MarketDataProvider):
-    def __init__(self, market_data: pd.DataFrame) -> None:
-        self.market_data = market_data.reset_index()
-        self.size = len(self.market_data.index)
-        self.cur_idx = 0
-
-    def next(self) -> t.Optional[MarketDataEntry]:
-        if self.cur_idx >= self.size:
-            return None
-
-        row = self.market_data.iloc[self.cur_idx]
-        entry = MarketDataEntry(row['timestamp'].value, row['contract_id'], row['mid_price'])
-        self.cur_idx += 1
-        return entry
-
-    def peek_timestamp(self) -> t.Optional[int]:
-        if self.cur_idx >= self.size:
-            return None
-
-        return self.market_data.iloc[self.cur_idx]['timestamp'].value
