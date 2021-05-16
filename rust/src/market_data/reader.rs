@@ -3,9 +3,8 @@ use std::{thread, time};
 use std::io::{BufRead, BufReader};
 
 use crate::actor::ActorBuffer;
-use super::api_parser;
-
-use super::{PIDataPacket, RawMarketDataProvider, MarketDataResult};
+use crate::market_data::api_parser;
+use crate::market_data::{PIDataPacket, DataPacket, RawMarketDataProvider, MarketDataResult, MarketDataProvider};
 
 pub struct MarketDataLive {
     retry_limit: u64,
@@ -67,5 +66,37 @@ impl RawMarketDataProvider for MarketDataSimJson {
         self.buffer.push(serde_json::from_str(&mut self.line_buffer).unwrap());
         self.line_buffer.clear();
         self.buffer.deque_ref()
+    }
+}
+
+pub struct MarketDataSimCsv {
+    data_reader: BufReader<File>,
+    read_buffer: Vec<u8>,
+    buffer: ActorBuffer<DataPacket>
+}
+
+impl MarketDataSimCsv {
+    pub fn new(filename: &str) -> Self {
+        let data_file = File::open(filename).unwrap();
+        let mut data_reader = BufReader::new(data_file);
+        assert!(DataPacket::check_header(&mut data_reader));
+
+        MarketDataSimCsv {
+            data_reader,
+            read_buffer: Vec::with_capacity(DataPacket::MAX_SER_SIZE),
+            buffer: ActorBuffer::new(),
+        }
+    }
+}
+
+impl MarketDataProvider for MarketDataSimCsv {
+    fn fetch_market_data(&mut self) -> Option<&DataPacket> {
+        match DataPacket::csv_deserialize(&mut self.data_reader, &mut self.read_buffer) {
+            Ok(data_packet) => {
+                self.buffer.push(data_packet);
+                self.buffer.deque_ref()
+            },
+            Err(_) => None, // ???
+        }
     }
 }

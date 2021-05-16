@@ -68,16 +68,13 @@ impl RawMarketDataCache {
         let mut nout = 0;
 
         for (&market_id, contract_ids) in updated_market_constracts.iter() {
-            let market_state = self.state.get_market(market_id).unwrap();
             for &contract_id in contract_ids.iter() {
                 let contract_state = self.state.get_contract(contract_id).unwrap();
                 let data_packet = DataPacket {
                     timestamp:  contract_state.data_ts,
                     payload: PacketPayload::PIQuote {
                         id: contract_state.id,
-                        market_id: contract_state.market_id,
-                        name: contract_state.name.clone(), // TODO: This is inefficient
-                        market_name: market_state.name.clone(),
+                        market_id: market_id,
                         status: contract_state.status,
                         trade_price: contract_state.prices.trade_price,
                         ask_price: contract_state.prices.ask_price,
@@ -152,9 +149,15 @@ impl MarketDataListener for MarketDataCache {
         }
         
         if update {
-            self.output.push(data.clone()); // Should we clone??
+            self.output.push(data.clone());
         }
         update
+    }
+}
+
+impl MarketDataProvider for MarketDataCache {
+    fn fetch_market_data(&mut self) -> Option<&DataPacket> {
+        self.output.deque_ref()
     }
 }
 

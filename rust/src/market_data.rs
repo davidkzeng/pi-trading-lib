@@ -1,8 +1,10 @@
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{Write, BufRead};
+use std::str::{self, FromStr};
+use std::convert::TryInto;
 
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, NaiveDateTime};
 
 use crate::base::Status;
 
@@ -41,19 +43,18 @@ pub struct ContractData {
 }
 
 /// Format for PI market data updates, organized around contract updates
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DataPacket {
+    // TODO: Replace this with just normal millis timestamp
     pub timestamp: DateTime<Utc>,
     pub payload: PacketPayload
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PacketPayload {
     PIQuote {
         id: u64,
         market_id: u64,
-        name: String,
-        market_name: String,
         status: Status,
         trade_price: f64,
         bid_price: f64,
@@ -100,6 +101,22 @@ impl PacketPayload {
         }
     }
 
+    pub fn csv_deserialize<T: BufRead>(reader: &mut T, buffer: &mut Vec<u8>) -> Result<Self, ()> {
+        let payload_type: &str = read_column_str(reader, buffer)?;
+        if payload_type == "piquote" {
+            Ok(PacketPayload::PIQuote {
+                id: read_column(reader, buffer)?,
+                market_id: read_column(reader, buffer)?,
+                status: read_column(reader, buffer)?,
+                trade_price: read_column(reader, buffer)?,
+                bid_price: read_column(reader, buffer)?,
+                ask_price: read_column(reader, buffer)?,
+            })
+        } else {
+            Err(())
+        }
+    }
+
     pub fn write_header<T: Write>(write_buf: &mut T) {
         write_column(write_buf, Some(Self::TYPE));
         write_column(write_buf, Some(Self::ID));
@@ -113,6 +130,9 @@ impl PacketPayload {
 
 impl DataPacket {
     const TIMESTAMP: &'static str = "timestamp";
+    #[allow(dead_code)]
+    const MAX_SIZE: usize = std::mem::size_of::<Self>();
+    const MAX_SER_SIZE: usize = 10 * Self::MAX_SIZE; // Estimate
 
     pub fn csv_serialize<T: Write>(&self, writer: &mut T) {
         // Performance question? Is using a byte array faster?
@@ -126,6 +146,22 @@ impl DataPacket {
         PacketPayload::write_header(writer);
         writeln!(writer).unwrap();
     }
+
+    pub fn csv_deserialize<T: BufRead>(reader: &mut T, buffer: &mut Vec<u8>) -> Result<Self, ()> {
+        let data_ts: i64 = read_column(reader, buffer)?;
+        let ts: DateTime<Utc> = DateTime::from_utc(NaiveDateTime::from_timestamp(data_ts / 1000, (data_ts % 1000 * 1000000).try_into().unwrap()), Utc);
+        let payload = PacketPayload::csv_deserialize(reader, buffer)?;
+        Ok(DataPacket { timestamp: ts, payload })
+    }
+
+    pub fn check_header<T: BufRead>(reader: &mut T) -> bool {
+        let mut reference_header: Vec<u8> = Vec::new();
+        Self::write_header(&mut reference_header);
+        let mut file_header: Vec<u8> = Vec::new();
+        reader.read_until(b'\n', &mut file_header).unwrap();
+        file_header.pop();
+        reference_header == file_header
+    }
 }
 
 fn write_column<W: Write, T: ToString + ?Sized>(writer: &mut W, val: Option<&T>) {
@@ -133,4 +169,58 @@ fn write_column<W: Write, T: ToString + ?Sized>(writer: &mut W, val: Option<&T>)
         writer.write_all(v.to_string().as_bytes()).unwrap();
     }
     writer.write_all(",".as_bytes()).unwrap();
+}
+
+fn read_column<R: BufRead, T: FromStr>(reader: &mut R, buffer: &mut Vec<u8>) -> Result<T, ()> {
+    buffer.clear();
+    reader.read_until(b',', buffer).map_err(|_err| ())?;
+    if buffer.is_empty() {
+        Err(())
+    } else {
+        str::from_utf8(&buffer[..buffer.len() - 1]).unwrap().parse().map_err(|_err| ())
+    }
+}
+
+fn read_column_str<'a, R: BufRead>(reader: &mut R, buffer: &'a mut Vec<u8>) -> Result<&'a str, ()> {
+    buffer.clear();
+    reader.read_until(b',', buffer).map_err(|_err| ())?;
+    if buffer.is_empty() {
+        Err(())
+    } else {
+        Ok(str::from_utf8(&buffer[..buffer.len() - 1]).unwrap())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use std::io::BufReader;
+
+    use chrono::TimeZone;
+
+    #[test]
+    fn test_print_data_packet_size() {
+        println!("{}", DataPacket::MAX_SIZE);
+    }
+
+    #[test]
+    fn test_ser_de_packet() {
+        let data_packet = DataPacket {
+            timestamp: Utc.ymd(2021, 1, 1).and_hms(1, 0, 0),
+            payload: PacketPayload::PIQuote { 
+                id: 1, market_id: 2, status: Status::Open, 
+                trade_price: 0.1, bid_price: 0.2, ask_price: 0.3
+            }
+        };
+        
+        let mut write_buf = Vec::with_capacity(DataPacket::MAX_SER_SIZE);
+        data_packet.csv_serialize(&mut write_buf);
+        assert_eq!(str::from_utf8(&write_buf[..]).unwrap(), "1609462800000,piquote,1,2,OPEN,0.1,0.2,0.3,\n");
+
+        let mut write_buf_reader = BufReader::new(&write_buf[..]);
+        let mut read_buf = Vec::with_capacity(DataPacket::MAX_SER_SIZE);
+        let deser_data_packet = DataPacket::csv_deserialize(&mut write_buf_reader, &mut read_buf).unwrap();
+        assert_eq!(deser_data_packet, data_packet);
+    }
 }
