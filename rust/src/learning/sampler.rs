@@ -5,6 +5,7 @@ use crate::market_data::{DataPacket, PacketPayload};
 
 pub struct SampleData {
     pub id: u64,
+    pub timestamp: i64,
     pub back_price: f64,
     pub tick_price: f64,
     pub forward_price: f64,
@@ -36,6 +37,7 @@ pub fn sample<T: Provider<DataPacket>>(input_market_data: &mut T, window: u64) -
                             data.timestamp + (window as i64),
                             SampleData {
                                 id,
+                                timestamp: data.timestamp,
                                 back_price,
                                 tick_price,
                                 forward_price: 0.0,

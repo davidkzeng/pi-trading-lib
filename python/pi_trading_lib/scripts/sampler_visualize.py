@@ -15,7 +15,7 @@ import pi_trading_lib.utils
 
 
 def rand_small():
-    return random.random() * 0.01 - 0.005
+    return (random.random() * 0.01) - 0.005
 
 
 def main():
@@ -45,8 +45,8 @@ def main():
             df = pd.read_csv(output_uri)
             dfs.append(df)
     df = pd.concat(dfs)
-    print(df)
-
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    print(df[df['id'] == 25662])
     df['rand'] = df.apply(lambda row: rand_small(), axis=1)
     df['rand2'] = df.apply(lambda row: rand_small(), axis=1)
 
@@ -57,7 +57,7 @@ def main():
 
     line = slope * x + intercept
     fig = go.Figure(data=[
-        go.Scattergl(x=x, y=y, text=df['id'], mode='markers'),
+        go.Scattergl(x=x, y=y, text=(df['id'].astype(str) + ' : ' + df['timestamp'].astype(str)), mode='markers'),
         go.Scattergl(x=x, y=line, mode='lines')
     ])
     fig.show()

@@ -20,11 +20,12 @@ fn main() {
     let samples = sampler::sample(&mut input_market_data, 10 * 60 * 1000);
 
     println!("Creating {} samples", samples.len());
-    csv_writer.write_record(&["id", "back", "tick", "forward"]).unwrap();
+    csv_writer.write_record(&["id", "timestamp", "back", "tick", "forward"]).unwrap();
     for sample in samples.into_iter() {
         csv_writer
             .write_record(&[
                 sample.id.to_string(),
+                sample.timestamp.to_string(),
                 sample.back_price.to_string(),
                 sample.tick_price.to_string(),
                 sample.forward_price.to_string(),
