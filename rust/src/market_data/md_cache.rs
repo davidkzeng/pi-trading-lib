@@ -130,6 +130,7 @@ impl Provider<DataPacket> for MarketDataCache {
     }
 }
 
+// TODO: Delayed vs standard should be more transport. Maybe just a param?
 /// Naive, memory-hungry implementation of a market data cache with delayed message processing
 ///
 /// This implementation is useful for when data packet arrival rate is less than the

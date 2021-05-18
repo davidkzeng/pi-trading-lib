@@ -10,8 +10,24 @@ pub trait Provider<O> {
     }
 }
 
-pub trait Listener<I> {
+/// Processes input messages
+///
+/// A listener can implement multiple variants, V, of ways to process a message
+pub trait Listener<I, const V: usize> {
     fn process(&mut self, input: &I) -> bool;
+}
+
+pub trait ListenerWithContext<I, C, const V: usize> {
+    fn process_with_context(&mut self, input: &I, context: &C) -> bool;
+}
+
+impl<L, I, const V: usize> ListenerWithContext<I, (), V> for L
+where
+    L: Listener<I, V>,
+{
+    fn process_with_context(&mut self, input: &I, _context: &()) -> bool {
+        self.process(input)
+    }
 }
 
 pub struct ActorBuffer<T> {
@@ -23,6 +39,7 @@ pub struct ActorBuffer<T> {
 
 pub const DEFAULT_BUFFER_SIZE: usize = 1024;
 
+/// Simple ring buffer
 impl<T> ActorBuffer<T> {
     pub fn new() -> Self {
         ActorBuffer::with_capacity(DEFAULT_BUFFER_SIZE)
@@ -48,6 +65,7 @@ impl<T> ActorBuffer<T> {
     }
 
     pub fn push(&mut self, val: T) {
+        // TODO: Allow this to alloc but warn
         if self.is_full() {
             panic!()
         }
@@ -89,9 +107,18 @@ pub fn drain<O, P: Provider<O>>(provider: &mut P) -> usize {
 
 /// Drains data from Provider to Listener until no more outputs remain
 pub fn drain_to<T, P: Provider<T>, L: Listener<T>>(provider: &mut P, listener: &mut L) -> usize {
+    let context = ();
+    drain_to_with_context(provider, listener, &context)
+}
+
+pub fn drain_to_with_context<T, C, P: Provider<T>, L: ListenerWithContext<T, C>>(
+    provider: &mut P,
+    listener: &mut L,
+    context: &C,
+) -> usize {
     let mut counter = 0;
     while let Some(t) = provider.fetch() {
-        listener.process(t);
+        listener.process_with_context(t, context);
         counter += 1;
     }
     counter

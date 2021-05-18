@@ -20,7 +20,9 @@ fn main() {
     let samples = sampler::sample(&mut input_market_data, 10 * 60 * 1000);
 
     println!("Creating {} samples", samples.len());
-    csv_writer.write_record(&["id", "timestamp", "back", "tick", "forward"]).unwrap();
+    csv_writer
+        .write_record(&["id", "timestamp", "back", "tick", "forward"])
+        .unwrap();
     for sample in samples.into_iter() {
         csv_writer
             .write_record(&[

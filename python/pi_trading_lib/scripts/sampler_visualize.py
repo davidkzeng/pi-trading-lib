@@ -46,11 +46,11 @@ def main():
             dfs.append(df)
     df = pd.concat(dfs)
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    print(df[df['id'] == 25662])
     df['rand'] = df.apply(lambda row: rand_small(), axis=1)
     df['rand2'] = df.apply(lambda row: rand_small(), axis=1)
 
-    df = df[(df['tick'] - df['back']) > 0.06]
+    df = df[(df['tick'] - df['back']) > 0.20]
+    print((df['forward'] - df['tick']).mean())
     x, y = (df['tick'] - df['back'] + df['rand']).to_numpy(), (df['forward'] - df['tick'] + df['rand2']).to_numpy()
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
     print(slope, intercept, r_value)
