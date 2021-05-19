@@ -124,6 +124,7 @@ impl Listener<DataPacket> for MarketDataCache {
     }
 }
 
+/// Outputs DataPackets that resulted in a market data update
 impl Provider<DataPacket> for MarketDataCache {
     fn output_buffer(&mut self) -> &mut ActorBuffer<DataPacket> {
         &mut self.output
@@ -301,4 +302,58 @@ fn ingest_one_contract_data(
     }
 
     update
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use crate::base::Status;
+
+    #[test]
+    fn test_market_data_cache() {
+        let mut market_data_cache = MarketDataCache::new(PIDataState::new());
+
+        let packet1 = DataPacket::new(1, PacketPayload::new_piquote(0, 0, Status::Open, 0.2, 0.3, 0.2));
+        let packet2 = DataPacket::new(2, PacketPayload::new_piquote(0, 0, Status::Open, 0.2, 0.3, 0.2));
+        let packet3 = DataPacket::new(3, PacketPayload::new_piquote(0, 0, Status::Open, 0.3, 0.3, 0.2));
+        let packet4 = DataPacket::new(2, PacketPayload::new_piquote(0, 0, Status::Open, 0.2, 0.3, 0.2));
+
+        // New contract in cache
+        market_data_cache.process(&packet1);
+        assert!(market_data_cache.state.has_contract(0));
+        assert!(market_data_cache.state.has_market(0));
+        let output1 = market_data_cache.fetch();
+        match output1 {
+            Some(out) => {
+                assert_eq!(&packet1, out);
+            }
+            None => {
+                assert!(false);
+            }
+        }
+
+        // No cache update
+        market_data_cache.process(&packet1);
+        market_data_cache.process(&packet2);
+        assert!(market_data_cache.fetch().is_none());
+
+        // Update cache
+        market_data_cache.process(&packet3);
+        assert_eq!(market_data_cache.state.get_contract(0).unwrap().prices.trade_price, 0.3);
+        let output3 = market_data_cache.fetch();
+        match output3 {
+            Some(out) => {
+                assert_eq!(&packet3, out);
+            }
+            None => {
+                assert!(false);
+            }
+        }
+
+        // Ignore backwards time jump
+        market_data_cache.process(&packet4);
+        assert_eq!(market_data_cache.state.get_contract(0).unwrap().prices.trade_price, 0.3);
+        assert!(market_data_cache.fetch().is_none());
+    }
 }

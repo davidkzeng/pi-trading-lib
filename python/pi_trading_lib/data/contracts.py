@@ -73,7 +73,7 @@ def get_markets(ids: t.List[int] = []):
     return [{'id': market[0], 'name': market[1]} for market in markets]
 
 
-def get_contract_names(ids: t.List[int]):
+def get_contract_names(ids: t.List[int]) -> t.Dict[int, str]:
     contracts = get_contracts(ids)
     contract_market_ids = list(set(contract['market_id'] for contract in contracts))
     markets = get_markets(contract_market_ids)

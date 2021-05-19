@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
+use std::io::Write;
 
-use crate::actor::{self, ActorBuffer, Listener, ListenerWithContext, Provider};
+use csv;
+
+use crate::actor::{self, ActorBuffer, Listener, Provider};
 use crate::base::PIDataState;
 use crate::market_data::md_cache::{DelayedMarketDataCache, MarketDataCache};
 use crate::market_data::{DataPacket, PacketPayload};
@@ -14,29 +17,51 @@ pub struct SampleData {
     pub forward_price: f64,
 }
 
-struct Sampler {
+pub struct SamplerWriter<W: Write> {
+    csv_writer: csv::Writer<W>,
+}
+
+impl<W: Write> SamplerWriter<W> {
+    pub fn new(writer: W) -> Self {
+        let mut csv_writer = csv::Writer::from_writer(writer);
+        csv_writer
+            .write_record(&["id", "timestamp", "back", "tick", "forward"])
+            .unwrap();
+        SamplerWriter { csv_writer }
+    }
+}
+
+impl<W: Write> Listener<SampleData> for SamplerWriter<W> {
+    fn process(&mut self, sample: &SampleData) -> bool {
+        self.csv_writer
+            .write_record(&[
+                sample.id.to_string(),
+                sample.timestamp.to_string(),
+                sample.back_price.to_string(),
+                sample.tick_price.to_string(),
+                sample.forward_price.to_string(),
+            ])
+            .unwrap();
+        true
+    }
+}
+
+pub struct Sampler {
     window: u64,
     forward_sample_queue: VecDeque<(i64, SampleData)>,
     output: ActorBuffer<SampleData>,
 }
 
-struct SamplerContext<'a> {
-    market_data_cache: &'a MarketDataCache,
-    delayed_market_data_cache: &'a DelayedMarketDataCache,
-}
-
-impl<'a> SamplerContext<'a> {
-    pub fn new(market_data_cache: &'a MarketDataCache, delayed_market_data_cache: &'a DelayedMarketDataCache) -> Self {
-        SamplerContext {
-            market_data_cache,
-            delayed_market_data_cache,
+impl Sampler {
+    fn new(window: u64) -> Self {
+        Sampler {
+            window,
+            forward_sample_queue: VecDeque::new(),
+            output: ActorBuffer::new(),
         }
     }
-}
 
-impl<'a> ListenerWithContext<DataPacket, SamplerContext<'a>, 1> for Sampler {
-    fn process_with_context(&mut self, data: &DataPacket, context: &SamplerContext<'a>) -> bool {
-        let SamplerContext { market_data_cache, .. } = *context;
+    pub fn post_process(&mut self, data: &DataPacket, market_data_cache: &MarketDataCache) -> bool {
         while data.timestamp > self.forward_sample_queue.back().map(|(ts, _)| *ts).unwrap_or(i64::MAX) {
             let (_, mut sample) = self.forward_sample_queue.pop_back().unwrap();
             if let Some(forward_price) = market_data_cache.state.contract_mid_price(sample.id) {
@@ -47,14 +72,13 @@ impl<'a> ListenerWithContext<DataPacket, SamplerContext<'a>, 1> for Sampler {
 
         true
     }
-}
 
-impl<'a> ListenerWithContext<DataPacket, SamplerContext<'a>, 2> for Sampler {
-    fn process_with_context(&mut self, data: &DataPacket, context: &SamplerContext<'a>) -> bool {
-        let SamplerContext {
-            market_data_cache,
-            delayed_market_data_cache,
-        } = *context;
+    pub fn pre_process(
+        &mut self,
+        data: &DataPacket,
+        market_data_cache: &MarketDataCache,
+        delayed_market_data_cache: &DelayedMarketDataCache,
+    ) -> bool {
         match data.payload {
             PacketPayload::PIQuote { id, .. } => {
                 if let Some(back_price) = delayed_market_data_cache.state.contract_mid_price(id) {
@@ -78,42 +102,37 @@ impl<'a> ListenerWithContext<DataPacket, SamplerContext<'a>, 2> for Sampler {
     }
 }
 
-impl Sampler {
-    fn new(window: u64) -> Self {
-        Sampler {
-            window,
-            forward_sample_queue: VecDeque::new(),
-            output: ActorBuffer::with_capacity(100000),
-        }
-    }
-
-    fn fetch(&mut self) -> Option<&SampleData> {
-        self.output.deque_ref()
+impl Provider<SampleData> for Sampler {
+    fn output_buffer(&mut self) -> &mut ActorBuffer<SampleData> {
+        &mut self.output
     }
 }
 
-pub fn sample<T: Provider<DataPacket>>(input_market_data: &mut T, window: u64) -> Vec<SampleData> {
+pub fn sample<W: Write, T: Provider<DataPacket>>(input_market_data: &mut T, writer: W, window: u64) {
     let mut market_data_cache = MarketDataCache::new(PIDataState::new());
     let mut delayed_market_data_cache = DelayedMarketDataCache::new(PIDataState::new(), window, 4096);
 
-    let mut samples: Vec<SampleData> = Vec::new();
     let mut sampler = Sampler::new(window);
 
-    while let Some(data) = input_market_data.fetch() {
-        let sampler_context = SamplerContext::new(&market_data_cache, &delayed_market_data_cache);
-        ListenerWithContext::<_, _, 1>::process_with_context(&mut sampler, data, &sampler_context);
-        market_data_cache.process(data);
-        delayed_market_data_cache.process(data);
-        let sampler_context = SamplerContext::new(&market_data_cache, &delayed_market_data_cache);
-        ListenerWithContext::<_, _, 2>::process_with_context(&mut sampler, data, &sampler_context);
+    let mut sampler_writer = SamplerWriter::new(writer);
 
-        while let Some(sample_data) = sampler.fetch() {
-            samples.push(sample_data.clone());
+    loop {
+        let mut progress = 0;
+        progress += actor::drain_to_fn(input_market_data, |data| {
+            sampler.pre_process(data, &market_data_cache, &delayed_market_data_cache);
+            market_data_cache.process(data);
+            delayed_market_data_cache.process(data);
+            sampler.post_process(data, &market_data_cache);
+
+            true
+        });
+
+        progress += actor::drain_to(&mut sampler, &mut sampler_writer);
+        actor::drain_sink(&mut market_data_cache);
+        actor::drain_sink(&mut delayed_market_data_cache);
+
+        if progress == 0 {
+            break;
         }
-
-        actor::drain(&mut market_data_cache);
-        actor::drain(&mut delayed_market_data_cache);
     }
-
-    samples
 }

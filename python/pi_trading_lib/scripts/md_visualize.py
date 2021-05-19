@@ -13,7 +13,7 @@ def main():
     parser.add_argument('end_date')
     parser.add_argument('--mids', nargs='*')
     parser.add_argument('--cids', nargs='*')
-    parser.add_argument('--interactive', action='store_true')
+    parser.add_argument('--backend', choices=['matplotlib', 'plotly'], default='plotly')
     parser.add_argument('--bid-ask', action='store_true')
     parser.add_argument('--data-archive')
 
@@ -36,7 +36,7 @@ def main():
 
     plot_df = plot_df.unstack(level=1)  # unstack the contract_id index
 
-    if args.interactive:
+    if args.backend == 'plotly':
         fig = go.Figure()
         for series in plot_df:
             fig.add_trace(go.Scatter(
@@ -47,7 +47,7 @@ def main():
                 connectgaps=True,
             ))
         fig.show()
-    else:
+    elif args.backend == 'matplotlib':
         plot_df.plot(figsize=(20, 10))
         plt.show()
 

@@ -70,6 +70,24 @@ impl PacketPayload {
     const BID_PRICE: &'static str = "bid_price";
     const ASK_PRICE: &'static str = "ask_price";
 
+    pub fn new_piquote(
+        id: u64,
+        market_id: u64,
+        status: Status,
+        trade_price: f64,
+        bid_price: f64,
+        ask_price: f64,
+    ) -> Self {
+        PacketPayload::PIQuote {
+            id,
+            market_id,
+            status,
+            trade_price,
+            bid_price,
+            ask_price,
+        }
+    }
+
     pub fn csv_serialize<T: Write>(&self, write_buf: &mut T) {
         match self {
             PacketPayload::PIQuote {
@@ -124,6 +142,10 @@ impl DataPacket {
     #[allow(dead_code)]
     const MAX_SIZE: usize = std::mem::size_of::<Self>();
     const MAX_SER_SIZE: usize = 10 * Self::MAX_SIZE; // Estimate
+
+    pub fn new(timestamp: i64, payload: PacketPayload) -> Self {
+        DataPacket { timestamp, payload }
+    }
 
     pub fn csv_serialize<T: Write>(&self, writer: &mut T) {
         // Performance question? Is using a byte array faster?

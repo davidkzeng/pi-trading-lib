@@ -55,9 +55,10 @@ def main():
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
     print(slope, intercept, r_value)
 
+    text = df['id'].astype(str) + ' : ' + df['tick'].astype(str) + ' : ' + df['timestamp'].astype(str)
     line = slope * x + intercept
     fig = go.Figure(data=[
-        go.Scattergl(x=x, y=y, text=(df['id'].astype(str) + ' : ' + df['timestamp'].astype(str)), mode='markers'),
+        go.Scattergl(x=x, y=y, text=text, mode='markers'),
         go.Scattergl(x=x, y=line, mode='lines')
     ])
     fig.show()

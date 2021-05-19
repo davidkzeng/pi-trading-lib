@@ -1,11 +1,12 @@
 use std::env;
 use std::fs::File;
 
-use pi_trading_lib::actor::{self, Listener, Provider};
+use pi_trading_lib::actor::components::CountLogger;
+use pi_trading_lib::actor::{self, Listener};
 use pi_trading_lib::base::PIDataState;
 use pi_trading_lib::market_data::md_cache::RawMarketDataCache;
 use pi_trading_lib::market_data::writer::DataPacketWriter;
-use pi_trading_lib::market_data::MarketDataSimJson;
+use pi_trading_lib::market_data::{DataPacket, MarketDataSimJson};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,25 +23,30 @@ fn main() {
     let data_state = PIDataState::new();
     let mut market_data_cache = RawMarketDataCache::new(data_state);
 
-    let mut write_counter = 0;
+    let mut write_counter = CountLogger::new("CSV writer");
 
     // MarketDataSimJson -> RawMarketDataCache -> Writer
     loop {
-        let market_data = match input_market_data.fetch() {
-            Some(market_data) => market_data,
-            None => {
+        let mut progress = 0;
+        progress += actor::drain_to(&mut input_market_data, &mut market_data_cache);
+
+        loop {
+            let progress2 = actor::drain_to_fn(&mut market_data_cache, |data: &DataPacket| {
+                writer.process(data);
+                write_counter.process(data);
+                true
+            });
+            progress += progress2;
+            if progress2 == 0 {
                 break;
             }
-        };
-
-        market_data_cache.process(market_data);
-        let packets_written = actor::drain_to(&mut market_data_cache, &mut writer);
-        if (write_counter + packets_written) / 1024 > write_counter / 1024 {
-            println!("Wrote {} packets", (write_counter / 1024 + 1) * 1024);
         }
-        write_counter += packets_written;
+
+        if progress == 0 {
+            break;
+        }
     }
 
-    println!("Wrote {} packets", write_counter);
+    write_counter.report();
     println!("Finished writing");
 }

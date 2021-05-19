@@ -43,44 +43,45 @@ impl MarketDataLive {
 pub struct MarketDataSimJson {
     data_reader: BufReader<File>,
     line_buffer: String,
-    buffer: ActorBuffer<PIDataPacket>,
+    output: ActorBuffer<PIDataPacket>,
 }
 
 impl MarketDataSimJson {
+    const LOAD_SIZE: usize = 64;
+
     pub fn new(filename: &str) -> Self {
         let data_file = File::open(filename).unwrap();
         MarketDataSimJson {
             data_reader: BufReader::new(data_file),
             line_buffer: String::new(),
-            buffer: ActorBuffer::new(),
+            output: ActorBuffer::new(),
         }
     }
 }
 
 impl Provider<PIDataPacket> for MarketDataSimJson {
     fn output_buffer(&mut self) -> &mut ActorBuffer<PIDataPacket> {
-        // TODO: We should refactor this into "Source provider" or something
-        panic!()
-    }
-
-    fn fetch(&mut self) -> Option<&PIDataPacket> {
-        let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
-        if bytes_read == 0 {
-            return None;
+        while self.output.size() < MarketDataSimJson::LOAD_SIZE {
+            let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
+            if bytes_read == 0 {
+                break;
+            }
+            self.output.push(serde_json::from_str(&mut self.line_buffer).unwrap());
+            self.line_buffer.clear();
         }
-        self.buffer.push(serde_json::from_str(&mut self.line_buffer).unwrap());
-        self.line_buffer.clear();
-        self.buffer.deque_ref()
+        &mut self.output
     }
 }
 
 pub struct MarketDataSimCsv {
     data_reader: BufReader<File>,
     read_buffer: Vec<u8>,
-    buffer: ActorBuffer<DataPacket>,
+    output: ActorBuffer<DataPacket>,
 }
 
 impl MarketDataSimCsv {
+    const LOAD_SIZE: usize = 64;
+
     pub fn new(filename: &str) -> Self {
         let data_file = File::open(filename).unwrap();
         let mut data_reader = BufReader::new(data_file);
@@ -89,24 +90,23 @@ impl MarketDataSimCsv {
         MarketDataSimCsv {
             data_reader,
             read_buffer: Vec::with_capacity(DataPacket::MAX_SER_SIZE),
-            buffer: ActorBuffer::new(),
+            output: ActorBuffer::new(),
         }
     }
 }
 
 impl Provider<DataPacket> for MarketDataSimCsv {
     fn output_buffer(&mut self) -> &mut ActorBuffer<DataPacket> {
-        // Refactor this to optimistaclly fill output_buffer
-        panic!()
-    }
-
-    fn fetch(&mut self) -> Option<&DataPacket> {
-        match DataPacket::csv_deserialize(&mut self.data_reader, &mut self.read_buffer) {
-            Ok(data_packet) => {
-                self.buffer.push(data_packet);
-                self.buffer.deque_ref()
+        while self.output.size() < MarketDataSimCsv::LOAD_SIZE {
+            match DataPacket::csv_deserialize(&mut self.data_reader, &mut self.read_buffer) {
+                Ok(data_packet) => {
+                    self.output.push(data_packet);
+                }
+                Err(_) => {
+                    break;
+                } // ???
             }
-            Err(_) => None, // ???
         }
+        &mut self.output
     }
 }
