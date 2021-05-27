@@ -12,7 +12,7 @@ import pi_trading_lib.date_util as date_util
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('start_date')
+    parser.add_argument('begin_date')
     parser.add_argument('end_date')
     parser.add_argument('--data-archive')
     parser.add_argument('--hist', choices=['contract', 'market'])
@@ -21,11 +21,11 @@ def main():
     if args.data_archive:
         pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
-    start_date = date_util.from_date_str(args.start_date)
-    end_date = date_util.from_date_str(args.end_date)
+    begin_date = date_util.from_str(args.begin_date)
+    end_date = date_util.from_str(args.end_date)
 
     if args.hist:
-        date_range = list(date_util.date_range(start_date, end_date))
+        date_range = list(date_util.date_range(begin_date, end_date))
         dfs = []
         for date in date_range:
             df = pi_trading_lib.data.market_data.get_raw_data(date)
@@ -44,7 +44,7 @@ def main():
         fig = go.Figure([go.Bar(x=counts.index.to_numpy().astype(str), y=counts.to_numpy())])
         fig.show()
     else:
-        date_range = list(date_util.date_range(start_date, end_date))
+        date_range = list(date_util.date_range(begin_date, end_date))
         df_lengths = []
         df_date_range = []
         for date in date_range:

@@ -90,7 +90,8 @@ impl RawMarketDataCache {
 
 impl Listener<PIDataPacket> for RawMarketDataCache {
     fn process(&mut self, data: &PIDataPacket) -> bool {
-        self.ingest_and_transform(data) > 0
+        self.ingest_and_transform(data);
+        true
     }
 }
 

@@ -142,4 +142,9 @@ impl PIDataState {
         self.get_contract(id)
             .map(|contract| (contract.prices.bid_price + contract.prices.ask_price) * 0.5)
     }
+
+    pub fn contract_spread(&self, id: u64) -> Option<f64> {
+        self.get_contract(id)
+            .map(|contract| contract.prices.ask_price - contract.prices.bid_price)
+    }
 }

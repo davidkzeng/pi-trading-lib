@@ -14,7 +14,7 @@ def main():
     print(args)
 
     pi_trading_lib.logging.init_logging()
-    date = pi_trading_lib.date_util.from_date_str(args.date)
+    date = pi_trading_lib.date_util.from_str(args.date)
     data_archive.set_archive_dir(args.archive_location)
 
     fte.archive_data(date)

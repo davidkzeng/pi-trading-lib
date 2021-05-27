@@ -47,7 +47,7 @@ pub struct MarketDataSimJson {
 }
 
 impl MarketDataSimJson {
-    const LOAD_SIZE: usize = 64;
+    const BATCH_SIZE: usize = 64;
 
     pub fn new(filename: &str) -> Self {
         let data_file = File::open(filename).unwrap();
@@ -61,7 +61,7 @@ impl MarketDataSimJson {
 
 impl Provider<PIDataPacket> for MarketDataSimJson {
     fn output_buffer(&mut self) -> &mut ActorBuffer<PIDataPacket> {
-        while self.output.size() < MarketDataSimJson::LOAD_SIZE {
+        while self.output.size() < MarketDataSimJson::BATCH_SIZE {
             let bytes_read = self.data_reader.read_line(&mut self.line_buffer).unwrap();
             if bytes_read == 0 {
                 break;
@@ -80,7 +80,7 @@ pub struct MarketDataSimCsv {
 }
 
 impl MarketDataSimCsv {
-    const LOAD_SIZE: usize = 64;
+    const BATCH_SIZE: usize = 64;
 
     pub fn new(filename: &str) -> Self {
         let data_file = File::open(filename).unwrap();
@@ -97,7 +97,7 @@ impl MarketDataSimCsv {
 
 impl Provider<DataPacket> for MarketDataSimCsv {
     fn output_buffer(&mut self) -> &mut ActorBuffer<DataPacket> {
-        while self.output.size() < MarketDataSimCsv::LOAD_SIZE {
+        while self.output.size() < MarketDataSimCsv::BATCH_SIZE {
             match DataPacket::csv_deserialize(&mut self.data_reader, &mut self.read_buffer) {
                 Ok(data_packet) => {
                     self.output.push(data_packet);

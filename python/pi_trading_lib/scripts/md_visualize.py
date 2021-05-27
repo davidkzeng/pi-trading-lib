@@ -1,18 +1,21 @@
 import argparse
 import datetime
+import itertools
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
 import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.data.data_archive as data_archive
+import pi_trading_lib.data.contracts
+import pi_trading_lib.date_util
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('start_date')
-    parser.add_argument('end_date')
-    parser.add_argument('--mids', nargs='*')
-    parser.add_argument('--cids', nargs='*')
+    parser.add_argument('--begin_date')
+    parser.add_argument('--end_date')
+    parser.add_argument('--mids', nargs='*', default=[])
+    parser.add_argument('--cids', nargs='*', default=[])
     parser.add_argument('--backend', choices=['matplotlib', 'plotly'], default='plotly')
     parser.add_argument('--bid-ask', action='store_true')
     parser.add_argument('--data-archive')
@@ -22,14 +25,28 @@ def main():
     if args.data_archive:
         data_archive.set_archive_dir(args.data_archive)
 
-    mids = tuple(int(mid) for mid in args.mids) if args.mids is not None else None
-    cids = tuple(int(cid) for cid in args.cids) if args.cids is not None else None
+    mids = tuple(int(mid) for mid in args.mids)
+    cids = tuple(int(cid) for cid in args.cids)
 
-    start_date = datetime.datetime.strptime(args.start_date, '%Y%m%d').date()
-    end_date = datetime.datetime.strptime(args.end_date, '%Y%m%d').date()
-    data = market_data.get_df(start_date, end_date, markets=mids, contracts=cids)
+    assert mids or cids
 
-    if args.bid_ask:
+    if mids is not None:
+        if cids is None:
+            cids = []
+        cids = cids + tuple(itertools.chain(*(pi_trading_lib.data.contracts.get_market_contracts(mids).values())))
+
+    if not args.begin_date and not args.end_date:
+        # Inferring start and end date based on contract ranges
+        contracts = pi_trading_lib.data.contracts.get_contracts(cids)
+        begin_date = min(contract['begin_date'] for contract in contracts)
+        end_date = max([contract['end_date'] for contract in contracts if contract['end_date'] is not None],
+                       default=datetime.date.today())
+    else:
+        begin_date = datetime.datetime.strptime(args.begin_date, '%Y%m%d').date()
+        end_date = datetime.datetime.strptime(args.end_date, '%Y%m%d').date()
+    data = market_data.get_df(begin_date, end_date, contracts=cids)
+
+    if args.bid_ask or len(cids) == 1:
         plot_df = data[['bid_price', 'ask_price']]
     else:
         plot_df = data['mid_price']

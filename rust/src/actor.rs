@@ -88,11 +88,7 @@ impl<T> ActorBuffer<T> {
 
 /// Drains Provider until no more outputs remain
 pub fn drain_sink<O, P: Provider<O>>(provider: &mut P) -> usize {
-    let mut counter = 0;
-    while let Some(_) = provider.fetch() {
-        counter += 1;
-    }
-    counter
+    drain_to_fn(provider, |_| true)
 }
 
 /// Drains data from Provider to Listener until no more outputs remain
@@ -113,9 +109,9 @@ where
 {
     let mut counter = 0;
     while let Some(t) = provider.fetch() {
-        listener(t);
+        let res = listener(t);
         counter += 1;
-        if counter >= MAX_DRAIN {
+        if !res || counter >= MAX_DRAIN {
             break;
         }
     }

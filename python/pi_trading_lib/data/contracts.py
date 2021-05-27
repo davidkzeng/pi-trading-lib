@@ -8,9 +8,10 @@ import datetime
 
 import pi_trading_lib
 import pi_trading_lib.fs as fs
-import pi_trading_lib.date_util as date_util
 import pi_trading_lib.data.contract_db as contract_db
 import pi_trading_lib.timers
+
+# ========================= Legacy =========================
 
 
 def save_contract_data(name: str, data: t.Dict[int, t.Dict[int, t.List]]):
@@ -28,10 +29,10 @@ def get_contract_data(name: str) -> t.Dict[int, t.Dict[int, t.List]]:
     assert os.path.exists(contract_file)
 
     with open(contract_file, 'r') as contract_f:
-        contract_info = json.load(contract_f)
+        contract_json = json.load(contract_f)
         contract_info = {int(mid): {int(cid): info for cid, info in mid_info.items()}
-                         for mid, mid_info in contract_info.items()}
-        return contract_info
+                         for mid, mid_info in contract_json.items()}
+    return contract_info
 
 
 def get_contract_data_by_cid(name: str) -> t.Dict[int, t.List]:
@@ -49,17 +50,30 @@ def get_contract_data_by_cid(name: str) -> t.Dict[int, t.List]:
 def get_contract_ids(name: str) -> t.List[int]:
     return list(get_contract_data_by_cid(name).keys())
 
+# ========================= Current =========================
+
 
 @pi_trading_lib.timers.timer
 def get_contracts(ids: t.List[int] = []):
     # TODO: Make this return dict
+    columns = ['id', 'name', 'market_id', 'begin_date', 'end_date']
+    column_str = ', '.join(columns)
     if len(ids) == 0:
-        query = 'SELECT * FROM contract'
+        query = f'SELECT {column_str} FROM contract'
     else:
-        query = f'SELECT * FROM contract WHERE id IN {contract_db.to_sql_list(ids)}'
+        query = f'SELECT {column_str} FROM contract WHERE id IN {contract_db.to_sql_list(ids)}'
 
-    contracts = contract_db.get_contract_db().cursor().execute(query).fetchall()
-    return [{'id': contract[0], 'name': contract[1], 'market_id': contract[2]} for contract in contracts]
+    res = contract_db.get_contract_db().cursor().execute(query).fetchall()
+    return [
+        {
+            'id': row[0],
+            'name': row[1],
+            'market_id': row[2],
+            'begin_date': datetime.date.fromisoformat(row[3]),
+            'end_date': datetime.date.fromisoformat(row[4]) if row[4] is not None else None,
+        }
+        for row in res
+    ]
 
 
 @pi_trading_lib.timers.timer
@@ -82,6 +96,18 @@ def get_contract_names(ids: t.List[int]) -> t.Dict[int, str]:
     for contract in contracts:
         contract_name_map[contract['id']] = markets[contract['market_id']] + ' ' + contract['name']
     return contract_name_map
+
+
+def get_market_contracts(market_ids: t.List[int]) -> t.Dict[int, t.List[int]]:
+    query = f"""
+        SELECT id, market_id FROM contract
+        WHERE market_id IN {contract_db.to_sql_list(market_ids)}
+    """
+    contracts = contract_db.get_contract_db().cursor().execute(query).fetchall()
+    res: t.Dict[int, t.List[int]] = {}
+    for contract in contracts:
+        res.setdefault(contract[1], []).append(contract[0])
+    return res
 
 
 # ========================= Updates =========================
@@ -155,7 +181,7 @@ def update_contract_info(date):
     daily_contracts: t.Dict[int, t.Dict] = {}
     daily_markets: t.Dict[int, t.Dict] = {}
     market_data_file = pi_trading_lib.data.data_archive.get_data_file(
-        'market_data_raw', {'date': date_util.to_date_str(date)})
+        'market_data_raw', {'date': date})
     with open(market_data_file, 'r') as f:
         for update in f:
             update = update.rstrip()

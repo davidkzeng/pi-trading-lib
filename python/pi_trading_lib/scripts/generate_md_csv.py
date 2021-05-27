@@ -10,7 +10,7 @@ import pi_trading_lib.logging
 
 
 def _run_converter(date, force=False):
-    date_str = date_util.to_date_str(date)
+    date_str = date_util.to_str(date)
     input_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_raw', {'date': date_str})
     output_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_csv', {'date': date_str})
 
@@ -36,7 +36,7 @@ def _run_converter(date, force=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('start_date')
+    parser.add_argument('begin_date')
     parser.add_argument('end_date')
     parser.add_argument('--data_archive')
     parser.add_argument('--force', action='store_true')
@@ -47,13 +47,13 @@ def main():
     if args.verbose:
         pi_trading_lib.logging.init_logging(logging.DEBUG)
 
-    start_date = date_util.from_date_str(args.start_date)
-    end_date = date_util.from_date_str(args.end_date)
+    begin_date = date_util.from_str(args.begin_date)
+    end_date = date_util.from_str(args.end_date)
 
     if args.data_archive:
         pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
-    for date in date_util.date_range(start_date, end_date):
+    for date in date_util.date_range(begin_date, end_date):
         _run_converter(date, force=args.force)
 
 

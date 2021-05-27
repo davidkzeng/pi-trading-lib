@@ -16,5 +16,5 @@ import pi_trading_lib.optimizer as optimizer
 logging.init_logging(WARN)
 
 # Useful constants
-yesterday = (datetime.now() - timedelta(days=1)).date()
-today = datetime.now().date()
+yesterday = date.today() - timedelta(days=1)
+today = date.today()

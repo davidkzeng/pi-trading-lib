@@ -7,6 +7,7 @@ use crate::actor::{self, ActorBuffer, Listener, Provider};
 use crate::base::PIDataState;
 use crate::market_data::md_cache::{DelayedMarketDataCache, MarketDataCache};
 use crate::market_data::{DataPacket, PacketPayload};
+use crate::parser::*;
 
 #[derive(Clone)]
 pub struct SampleData {
@@ -65,6 +66,10 @@ impl Sampler {
         while data.timestamp > self.forward_sample_queue.back().map(|(ts, _)| *ts).unwrap_or(i64::MAX) {
             let (_, mut sample) = self.forward_sample_queue.pop_back().unwrap();
             if let Some(forward_price) = market_data_cache.state.contract_mid_price(sample.id) {
+                let contract_spread = market_data_cache.state.contract_spread(sample.id).unwrap();
+                if contract_spread > 0.04 {
+                    continue;
+                }
                 sample.forward_price = forward_price;
                 self.output.push(sample);
             }
@@ -83,6 +88,11 @@ impl Sampler {
             PacketPayload::PIQuote { id, .. } => {
                 if let Some(back_price) = delayed_market_data_cache.state.contract_mid_price(id) {
                     if let Some(tick_price) = market_data_cache.state.contract_mid_price(id) {
+                        let back_contract_spread = market_data_cache.state.contract_spread(id).unwrap();
+                        let contract_spread = delayed_market_data_cache.state.contract_spread(id).unwrap();
+                        if contract_spread > 0.04 || back_contract_spread > 0.04 {
+                            return true;
+                        }
                         self.forward_sample_queue.push_front((
                             data.timestamp + (self.window as i64),
                             SampleData {
@@ -108,7 +118,16 @@ impl Provider<SampleData> for Sampler {
     }
 }
 
-pub fn sample<W: Write, T: Provider<DataPacket>>(input_market_data: &mut T, writer: W, window: u64) {
+pub fn register_args(parser: Parser) -> Parser {
+    parser.arg(Arg::with_name("sampler-window").takes_value().required())
+}
+
+pub fn get_args(parser: &Parser) -> u64 {
+    parser.get_str_arg("sampler-window").unwrap().parse::<u64>().unwrap()
+}
+
+pub fn sample<W: Write, T: Provider<DataPacket>>(input_market_data: &mut T, writer: W, args: &Parser) {
+    let window = get_args(args);
     let mut market_data_cache = MarketDataCache::new(PIDataState::new());
     let mut delayed_market_data_cache = DelayedMarketDataCache::new(PIDataState::new(), window, 4096);
 

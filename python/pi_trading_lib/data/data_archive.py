@@ -2,8 +2,10 @@ import typing as t
 import csv
 import functools
 import os
+import datetime
 
 import pi_trading_lib
+import pi_trading_lib.date_util as date_util
 
 # reads from environment for easier interactive workflows
 _archive_dir = os.environ.get('PI_DATA_ARCHIVE')
@@ -37,6 +39,9 @@ def _get_data_archives() -> t.Dict[str, str]:
 def get_data_file(name: str, template_vals: t.Dict[str, t.Any] = {}) -> str:
     data_archives = _get_data_archives()
     location_template = data_archives[name]
+
+    if 'date' in template_vals and isinstance(template_vals['date'], datetime.date):
+        template_vals['date'] = date_util.to_str(template_vals['date'])
     location = location_template.format(**template_vals)
 
     return location

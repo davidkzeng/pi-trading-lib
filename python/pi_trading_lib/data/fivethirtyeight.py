@@ -61,17 +61,17 @@ def archive_data(date: datetime.date) -> None:
         reader = csv.DictReader(data_config_f)
         for row in reader:
             name = row['name']
-            start_date, end_date = row['start_date'], row['end_date']
+            begin_date, end_date = row['begin_date'], row['end_date']
             location = row['location']
 
             if (
-                    (start_date and date < date_util.from_date_str(start_date)) or
-                    (end_date and date > date_util.from_date_str(end_date))
+                    (begin_date and date < date_util.from_str(begin_date)) or
+                    (end_date and date > date_util.from_str(end_date))
                ):
                 logging.info("Out of date range, ignoring data source {name}".format(name=name))
                 continue
 
-            save_location = data_archive.get_data_file(name, {'date': date_util.to_date_str(date)})
+            save_location = data_archive.get_data_file(name, {'date': date_util.to_str(date)})
             if os.path.exists(save_location):
                 logging.info(f"Data already exists: {save_location}")
                 continue
@@ -95,7 +95,7 @@ def _get_data_sources():
 
 def get_csv(name: str, date: datetime.date) -> t.Optional[str]:
     assert name in _get_data_sources()
-    data_file = data_archive.get_data_file(name, {'date': date_util.to_date_str(date)})
+    data_file = data_archive.get_data_file(name, {'date': date_util.to_str(date)})
     return data_file
 
 
@@ -106,10 +106,10 @@ def _process_pres_state_2020(df: pd.DataFrame) -> pd.DataFrame:
 
 @pi_trading_lib.decorators.copy
 @functools.lru_cache()
-def get_df(name: str, start_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
-    """Get market data dataframe, including start_date and end_date"""
+def get_df(name: str, begin_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
+    """Get market data dataframe, including begin_date and end_date"""
     base_df = pd.concat(
-        [pd.read_csv(get_csv(name, date)) for date in date_util.date_range(start_date, end_date)], axis=0
+        [pd.read_csv(get_csv(name, date)) for date in date_util.date_range(begin_date, end_date)], axis=0
     )
 
     if name == 'pres_state_2020':

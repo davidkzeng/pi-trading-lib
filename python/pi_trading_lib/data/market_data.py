@@ -24,12 +24,12 @@ def _get_missing_market_data_days() -> t.List[str]:
 
 
 def bad_market_data(date: datetime.date) -> bool:
-    return date_util.to_date_str(date) in _get_missing_market_data_days()
+    return date_util.to_str(date) in _get_missing_market_data_days()
 
 
 def get_raw_data(date: datetime.date) -> pd.DataFrame:
     """Get raw data for date as dataframe"""
-    market_data_file = data_archive.get_data_file('market_data_csv', {'date': date_util.to_date_str(date)})
+    market_data_file = data_archive.get_data_file('market_data_csv', {'date': date_util.to_str(date)})
     if not os.path.exists(market_data_file):
         logging.warn('No raw market data for {date}'.format(date=str(date)))
         md_df = pd.DataFrame([], columns=COLUMNS)
@@ -50,21 +50,16 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
 @pi_trading_lib.decorators.copy
 @functools.lru_cache()
 def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ...]] = None,
-                      markets: t.Optional[t.Tuple[int, ...]] = None,
                       snapshot_interval: t.Optional[datetime.timedelta] = None) -> pd.DataFrame:
     """
     Get data for date as dataframe, applying filters
 
     param snapshot_interval: Transform dataframe into a market data snapshot every snapshot_interval time
     """
-    assert contracts is None or markets is None, "Cannot specify both contracts and markets"
-
-    # Add support for both cids and mids
     df = get_raw_data(date)
+
     if contracts is not None:
         df = df.iloc[df.index.get_level_values('contract_id').isin(contracts)]
-    if markets is not None:
-        df = df[df['market_id'].isin(markets)]
 
     if snapshot_interval is not None:
         assert snapshot_interval <= datetime.timedelta(days=1)
@@ -143,11 +138,11 @@ def add_mid_price(df: pd.DataFrame):
     return df
 
 
-def get_df(start_date: datetime.date, end_date: datetime.date, **filter_kwargs) -> pd.DataFrame:
-    """Get market data between [start_date, end_date], inclusive"""
+def get_df(begin_date: datetime.date, end_date: datetime.date, **filter_kwargs) -> pd.DataFrame:
+    """Get market data between [begin_date, end_date], inclusive"""
     # TODO: Support intraday snapshots
     df = pd.concat(
-        [get_filtered_data(date, **filter_kwargs) for date in date_util.date_range(start_date, end_date)],
+        [get_filtered_data(date, **filter_kwargs) for date in date_util.date_range(begin_date, end_date)],
         axis=0
     )
     df = add_market_best_price(df)
