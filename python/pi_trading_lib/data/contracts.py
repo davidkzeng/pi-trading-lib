@@ -10,6 +10,7 @@ import pi_trading_lib
 import pi_trading_lib.fs as fs
 import pi_trading_lib.data.contract_db as contract_db
 import pi_trading_lib.timers
+import pi_trading_lib.decorators
 
 # ========================= Legacy =========================
 
@@ -54,26 +55,31 @@ def get_contract_ids(name: str) -> t.List[int]:
 
 
 @pi_trading_lib.timers.timer
-def get_contracts(ids: t.List[int] = []):
+def get_contracts(ids: t.Optional[t.List[int]] = None) -> t.Dict[int, t.Dict]:
     # TODO: Make this return dict
-    columns = ['id', 'name', 'market_id', 'begin_date', 'end_date']
+    if ids is not None and len(ids) == 0:
+        return {}
+
+    columns = ['id', 'name', 'market_id', 'begin_date', 'end_date', 'last_update_date']
     column_str = ', '.join(columns)
-    if len(ids) == 0:
+    if ids is None:
         query = f'SELECT {column_str} FROM contract'
     else:
         query = f'SELECT {column_str} FROM contract WHERE id IN {contract_db.to_sql_list(ids)}'
 
     res = contract_db.get_contract_db().cursor().execute(query).fetchall()
-    return [
-        {
+
+    return {
+        row[0]: {
             'id': row[0],
             'name': row[1],
             'market_id': row[2],
             'begin_date': datetime.date.fromisoformat(row[3]),
             'end_date': datetime.date.fromisoformat(row[4]) if row[4] is not None else None,
+            'last_update_date': datetime.date.fromisoformat(row[5]),
         }
         for row in res
-    ]
+    }
 
 
 @pi_trading_lib.timers.timer
@@ -84,17 +90,23 @@ def get_markets(ids: t.List[int] = []):
         query = f'SELECT * FROM market WHERE id IN {contract_db.to_sql_list(ids)}'
 
     markets = contract_db.get_contract_db().cursor().execute(query).fetchall()
+    # TODO: Return dict
     return [{'id': market[0], 'name': market[1]} for market in markets]
 
 
 def get_contract_names(ids: t.List[int]) -> t.Dict[int, str]:
+    """Returns {contract id: full contract name}"""
+
     contracts = get_contracts(ids)
-    contract_market_ids = list(set(contract['market_id'] for contract in contracts))
+    contract_market_ids = list(set(contract['market_id'] for contract in contracts.values()))
     markets = get_markets(contract_market_ids)
     markets = {market['id']: market['name'] for market in markets}
     contract_name_map = {}
-    for contract in contracts:
-        contract_name_map[contract['id']] = markets[contract['market_id']] + ' ' + contract['name']
+    for contract_id, contract in contracts.items():
+        if markets[contract['market_id']] != contract['name']:
+            contract_name_map[contract_id] = markets[contract['market_id']] + ' ' + contract['name']
+        else:
+            contract_name_map[contract_id] = contract['name']
     return contract_name_map
 
 
@@ -110,26 +122,47 @@ def get_market_contracts(market_ids: t.List[int]) -> t.Dict[int, t.List[int]]:
     return res
 
 
+@pi_trading_lib.decorators.memoize_mapping()
+def is_binary_contract(ids: t.List[int]) -> t.Dict[int, bool]:
+    contracts = get_contracts(ids)
+    unique_market_ids = list(set(contract['market_id'] for contract in contracts.values()))
+    market_contracts = get_market_contracts(unique_market_ids)
+    market_size = {market_id: len(cons) for market_id, cons in market_contracts.items()}
+    # heuristic
+    return {contract_id: market_size[contract['market_id']] <= 2 for contract_id, contract in contracts.items()}
+
+
 # ========================= Updates =========================
 
 @pi_trading_lib.timers.timer
 def add_contracts(contracts):
     contract_rows = [
-        (contract['id'], contract['name'], contract['market_id'], contract['begin_date'].isoformat(), None)
+        (contract['id'], contract['name'], contract['market_id'],
+         contract['begin_date'].isoformat(), contract['begin_date'].isoformat(), None)
         for contract in contracts
     ]
     db = contract_db.get_contract_db()
     with db:
-        db.executemany('INSERT INTO contract VALUES (?, ?, ?, ?, ?)', contract_rows)
+        db.executemany('INSERT INTO contract VALUES (?, ?, ?, ?, ?, ?)', contract_rows)
 
 
 @pi_trading_lib.timers.timer
 def update_contract_dates(contract_ids: t.List[int], alive_date: datetime.date):
+    """Update contract begin, last_update, end dates.
+
+    TODO: Define the invariant here
+    TODO: Redo this to be cleaner, set end date based on whether there is data on the last
+          data date in the overall DB
+    f(contracts + their alive date ranges) = contract_state
+    """
+
     alive_date_str = alive_date.isoformat()
+
+    # Step 1: Extend begin date
     query = f"""
         SELECT id FROM contract
         WHERE id IN {contract_db.to_sql_list(contract_ids)}
-        AND (begin_date IS NULL OR begin_date > '{alive_date_str}')
+        AND begin_date > '{alive_date_str}'
     """
     results = contract_db.get_contract_db().cursor().execute(query).fetchall()
     begin_date_update_ids = [result[0] for result in results]
@@ -140,30 +173,48 @@ def update_contract_dates(contract_ids: t.List[int], alive_date: datetime.date):
                 WHERE id IN {contract_db.to_sql_list(begin_date_update_ids)}
             """)
 
+    # Step 2: Extend last_update_date
     query = f"""
         SELECT id FROM contract
-        WHERE id IN {contract_db.to_sql_list(contract_ids)} AND end_date < '{alive_date_str}'
+        WHERE id IN {contract_db.to_sql_list(contract_ids)}
+        AND last_update_date < '{alive_date_str}'
+    """
+    results = contract_db.get_contract_db().cursor().execute(query).fetchall()
+    last_update_date_update_ids = [result[0] for result in results]
+    print(f'Extending last update date for {len(results)} contracts')
+    with contract_db.get_contract_db() as db:
+        db.execute(
+            f"""UPDATE contract SET last_update_date = '{alive_date_str}'
+                WHERE id IN {contract_db.to_sql_list(last_update_date_update_ids)}
+            """)
+
+    # Step 3: Reset end date if actually alive
+    query = """
+        SELECT id FROM contract
+        WHERE end_date IS NOT NULL AND end_date < last_update_date
     """
     results = contract_db.get_contract_db().cursor().execute(query).fetchall()
     end_date_update_ids = [result[0] for result in results]
-    print(f'Extending end date for {len(results)} contracts')
+    print(f'Resetting end date for {len(results)} contracts')
     with contract_db.get_contract_db() as db:
         db.execute(
-            f"""UPDATE contract SET end_date = '{alive_date_str}'
+            f"""UPDATE contract SET end_date = NULL
                 WHERE id IN {contract_db.to_sql_list(end_date_update_ids)}
             """)
 
+    # Step 4: Set end date for contracts missing data.
     query = f"""
         SELECT id FROM contract
         WHERE id NOT IN {contract_db.to_sql_list(contract_ids)}
-        AND end_date IS NULL AND begin_date < '{alive_date_str}'
+        AND (end_date IS NULL OR end_date != last_update_date)
+        AND (last_update_date < '{alive_date_str}')
     """
     results = contract_db.get_contract_db().cursor().execute(query).fetchall()
     end_date_update_ids = [result[0] for result in results]
     print(f'Setting end date for {len(results)} contracts')
     with contract_db.get_contract_db() as db:
         db.execute(
-            f"""UPDATE contract SET end_date = '{alive_date_str}'
+            f"""UPDATE contract SET end_date = last_update_date
                 WHERE id IN {contract_db.to_sql_list(end_date_update_ids)}
             """)
 
@@ -206,7 +257,7 @@ def update_contract_info(date):
     db_contracts = get_contracts(list(daily_contracts.keys()))
     db_markets = get_markets(list(daily_markets.keys()))
     missing_markets = set(daily_markets.keys()) - set(market['id'] for market in db_markets)
-    missing_contracts = set(daily_contracts.keys()) - set(contract['id'] for contract in db_contracts)
+    missing_contracts = set(daily_contracts.keys()) - set(db_contracts.keys())
 
     if len(missing_markets) > 0:
         print(f'Adding {len(missing_markets)} new markets')

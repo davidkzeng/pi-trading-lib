@@ -4,11 +4,14 @@ import functools
 import sqlite3
 import typing as t
 
+import subprocess
+
 import pi_trading_lib.data.data_archive
 
 
 MIGRATIONS = [
     '1_initialize.sql',
+    '2_resolution.sql',
 ]
 MIGRATION_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'db')
 
@@ -26,6 +29,11 @@ def get_contract_db():
 
 
 def initialize_db():
+    db_uri = pi_trading_lib.data.data_archive.get_data_file('contract_db')
+    if not os.path.exists(db_uri):
+        # TODO: Make non interactive
+        subprocess.check_call(['sqlite3', db_uri])
+
     db = get_contract_db()
 
     starting_version = db.cursor().execute('pragma user_version').fetchone()[0]

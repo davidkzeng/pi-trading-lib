@@ -37,7 +37,7 @@ def main():
 
     if not args.begin_date and not args.end_date:
         # Inferring start and end date based on contract ranges
-        contracts = pi_trading_lib.data.contracts.get_contracts(cids)
+        contracts = pi_trading_lib.data.contracts.get_contracts(cids).values()
         begin_date = min(contract['begin_date'] for contract in contracts)
         end_date = max([contract['end_date'] for contract in contracts if contract['end_date'] is not None],
                        default=datetime.date.today())

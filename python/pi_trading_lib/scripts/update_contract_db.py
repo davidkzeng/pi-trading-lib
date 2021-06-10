@@ -7,12 +7,14 @@ import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.data.history as history
 import pi_trading_lib.timers as timers
 
+DATA_START_DATE = '20200817'
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('begin_date')
-    parser.add_argument('end_date')
-    parser.add_argument('--data_archive')
+    parser.add_argument('--begin-date', default=DATA_START_DATE)
+    parser.add_argument('--end-date')
+    parser.add_argument('--data-archive')
 
     parser.add_argument('--force-history', action='store_true')
 

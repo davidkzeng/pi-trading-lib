@@ -3,6 +3,7 @@ CREATE TABLE contract (
     name TEXT NOT NULL,
     market_id INTEGER NOT NULL,
     begin_date TEXT NOT NULL,
+    last_update_date TEXT NOT NULL,
     end_date TEXT,
     FOREIGN KEY(market_id) REFERENCES market(id)
 );

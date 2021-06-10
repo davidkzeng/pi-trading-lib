@@ -10,6 +10,7 @@ import pi_trading_lib.data.data_archive as data_archive
 import pi_trading_lib.date_util as date_util
 import pi_trading_lib.decorators
 import pi_trading_lib.data.contracts
+import pi_trading_lib.timers
 
 # TODO: Store market data in contract based format to optimize for common use cases
 
@@ -27,6 +28,8 @@ def bad_market_data(date: datetime.date) -> bool:
     return date_util.to_str(date) in _get_missing_market_data_days()
 
 
+@functools.lru_cache()
+@pi_trading_lib.timers.timer
 def get_raw_data(date: datetime.date) -> pd.DataFrame:
     """Get raw data for date as dataframe"""
     market_data_file = data_archive.get_data_file('market_data_csv', {'date': date_util.to_str(date)})
@@ -43,7 +46,7 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
         md_df = md_df[COLUMNS]
 
     md_df = md_df.set_index(['timestamp', 'contract_id'])
-    md_df = md_df.sort_index(level='timestamp')
+    md_df = md_df.sort_index(level='timestamp')  # Is this needed? maybe presorted
     return md_df
 
 

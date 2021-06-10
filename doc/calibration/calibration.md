@@ -31,4 +31,4 @@ For adapting to available predictit market data. We can:
     - Get final day from db, check last day price
 - Aggregate samples per contract.
     - python?
-- Merge + compupte calibration curve
+- Merge + compute calibration curve

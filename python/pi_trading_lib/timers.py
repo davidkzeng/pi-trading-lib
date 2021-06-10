@@ -25,6 +25,10 @@ class FunctionTimer:
             return None
         return format(self.sum, '.6f'), format(self.sum / self.count, '.6f'), self.count
 
+    def reset(self):
+        self.sum = 0.0
+        self.count = 0
+
 
 _function_timers: t.Dict[str, FunctionTimer] = {}
 
@@ -54,3 +58,8 @@ def report_timers():
         if timer_report is not None:
             sum_, avg, count = timer_report
             print_format(func_name, sum_, avg, count)
+
+
+def reset_timers():
+    for timer in _function_timers.values():
+        timer.reset()

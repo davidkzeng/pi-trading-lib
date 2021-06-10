@@ -13,6 +13,8 @@ import pi_trading_lib.states as states
 import pi_trading_lib.logging as logging
 import pi_trading_lib.optimizer as optimizer
 
+import pi_trading_lib.date_util as date_util
+
 logging.init_logging(WARN)
 
 # Useful constants
