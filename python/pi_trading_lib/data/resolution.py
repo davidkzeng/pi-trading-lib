@@ -1,5 +1,4 @@
 import typing as t
-import argparse
 
 import pi_trading_lib.decorators
 import pi_trading_lib.data.contracts
@@ -83,7 +82,7 @@ def audit_resolutions():
             if market_id not in NO_CORRECT_CONTRACT_MARKETS:
                 audit_passed = False
                 print(f"{market_id},  # {market['name']}, 0 correct contracts")
-    
+
     if audit_passed:
         print('Audit Passed')
     else:

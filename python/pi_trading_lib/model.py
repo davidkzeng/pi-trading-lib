@@ -21,3 +21,9 @@ class BaseModel:
     @staticmethod
     def get_base_contraints(x_b, x_s, price_b, price_s, capital, current_position) -> t.List:
         pass
+
+
+class ReturnModel:
+    @abstractmethod
+    def get_return(self, contracts: t.List[int]) -> t.List[float]:
+        pass

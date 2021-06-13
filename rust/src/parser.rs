@@ -28,7 +28,7 @@ impl<'a> Parser<'a> {
         Ok(self)
     }
 
-    pub fn print_help<W: Write>(&self, writer: W) {}
+    pub fn print_help<W: Write>(&self, _writer: W) {}
 
     pub fn parse_args<I: Iterator<Item = &'a String>>(mut self, args: I) -> Result<Self, String> {
         let mut args_iter = args.peekable();

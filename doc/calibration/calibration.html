@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>calibration</title>
+  <style>
+    html {
+      line-height: 1.5;
+      font-family: Georgia, serif;
+      font-size: 20px;
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      word-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 1em;
+      }
+    }
+    @media print {
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, 'Lucida Console', Consolas, monospace;
+      font-size: 85%;
+      margin: 0;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">calibration</h1>
+</header>
+<h1 id="investigate-whether-predictit-markets-are-well-calibrated">Investigate whether PredictIt markets are well calibrated</h1>
+<h2 id="academic-research-prior-work">Academic Research Prior Work</h2>
+<p>Existing work on whether prediction markets are well calibrated.</p>
+<p><a href="page_clemen_ej_2013.pdf">DO PREDICTION MARKETS PRODUCE WELL-CALIBRATED PROBABILITY FORECASTS?. Page, Clemen 2013</a></p>
+<p>They use the following approach:</p>
+<ul>
+<li>Local Regression Estimator (sampled at 100 discrete price points, 0.10 sized window)</li>
+<li>Sample on transactions</li>
+<li>Sample 10 per market.</li>
+<li>597 competitions, 1787 markets, 512612 transactions</li>
+<li>InTrade dataset</li>
+</ul>
+<h2 id="replication">Replication</h2>
+<p>For adapting to available predictit market data. We can:</p>
+<ul>
+<li>Keep N samples per contract (or market).</li>
+<li>Sample on price changes?
+<ul>
+<li>Or maybe hourly</li>
+</ul></li>
+<li>Local Regression Estimator
+<ul>
+<li>Or just use simple windowed average for initial implementation</li>
+</ul></li>
+</ul>
+<h2 id="implementation">Implementation</h2>
+<ul>
+<li>Determine contracts where outcome can be determined from final market price.
+<ul>
+<li>Get final market price + check if &gt; 0.98</li>
+<li>Get final day from db, check last day price</li>
+</ul></li>
+<li>Aggregate samples per contract.
+<ul>
+<li>python?</li>
+</ul></li>
+<li>Merge + compute calibration curve</li>
+</ul>
+<h2 id="initial-results">Initial Results</h2>
+<p>We try to sample in a method similar by simpler compare to Page, Clemen by using an exponential weighting function on each of 100 discrete price points to compute the emperical resolution frequencies. We look at both sampling on active contracts on each day, and also take their approach of collecting a fixed number of samples per market. This normalizes for markets with different # of contracts and trading days.</p>
+<p>Initial results on nonbinary markets suggests there is a significant midrange segment where long contracts are overpriced.</p>
+<p><img src="pos_nonbinary_market_sampled.png" height="150" alt="A" /> <img src="pos_nonbinary.png" height="150" alt="D" /></p>
+<p>That being said, a significant portion of the data came from Biden cabinet markets, where many cabinet picks were not confirmed. These events were highly correlated, and removing them from the picture weakens the correlation.</p>
+<p>We start to see the trend of contracts with price &gt;0.8 being underpriced.</p>
+<p><img src="all_nonbinary_market_sampled.png" height="150" alt="B" /> <img src="all_nonbinary.png" height="150" alt="C" /></p>
+<p>Binary markets seem reasonable well calibrated with the exception of tail probabilities. Probably combination of large “risk-free” rate as well as 2020 election markets being Trump conspiracy biased.</p>
+<p><img src="_binary_market_sampled.png" height="150" alt="E" /> <img src="_binary.png" height="150" alt="F" /></p>
+<p>Finally, it seems like the explanation for the difference between market sampled and day sampled has more to do with the normalization over number of days rather than normalizing over # of contracts. (should say nonbinary)</p>
+<p><img src="all_nonbinary_contract_sampled.png" height="150" alt="G2" /> <img src="pos_nonbinary_contract_sampled.png" height="150" alt="G2" /></p>
+<p>Confidence intervals (resampling half of markets, assumes markets reasonable independent)</p>
+<p><img src="pos_nonbinary_market_sampled_conf.png" height="150" alt="H" /></p>
+<h2 id="theory">Theory</h2>
+<h2 id="1--4--5"><span class="math display">1 + 4 = 5</span></h2>
+</body>
+</html>

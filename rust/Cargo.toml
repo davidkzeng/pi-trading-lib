@@ -1,4 +1,4 @@
-cargo-features = ["named-profiles"]
+# cargo-features = ["named-profiles"]
 
 [package]
 name = "pi_trading_lib"
@@ -20,6 +20,7 @@ chrono= { version = "0.4", features = ["serde"] }
 chrono-tz="0.5"
 csv = "1.1"
 
-[profile.release-bench]
-inherits = "release"
-debug = 1
+# Nightly
+# [profile.release-bench]
+# inherits = "release"
+# debug = 1
