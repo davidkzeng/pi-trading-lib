@@ -9,10 +9,7 @@ pub trait Provider<O> {
 }
 
 /// Processes input messages
-///
-/// A listener can implement multiple variants, V, of ways to process a message
-#[rustfmt::skip]
-pub trait Listener<I, const V: usize = 1> {
+pub trait Listener<I> {
     fn process(&mut self, input: &I) -> bool;
 }
 
