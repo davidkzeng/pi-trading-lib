@@ -1,7 +1,9 @@
+import argparse
 import typing as t
 
 import pi_trading_lib.decorators
 import pi_trading_lib.data.contracts
+import pi_trading_lib.data.contract_db as contract_db
 import pi_trading_lib.data.market_data as market_data
 from pi_trading_lib.data.resolution_data import CONTRACT_RESOLUTIONS, UNRESOLVED_CONTRACTS, NO_CORRECT_CONTRACT_MARKETS
 
@@ -9,7 +11,23 @@ from pi_trading_lib.data.resolution_data import CONTRACT_RESOLUTIONS, UNRESOLVED
 @pi_trading_lib.decorators.memoize_mapping()
 @pi_trading_lib.timers.timer
 def get_contract_resolution(ids: t.List[int]) -> t.Dict[int, t.Optional[float]]:
-    # TODO: Convert this to DB entry
+    resolution = _get_contract_resolution_db(ids)
+    return resolution
+
+
+def _get_contract_resolution_db(ids: t.List[int]) -> t.Dict[int, t.Optional[float]]:
+    columns = ['contract_id', 'value']
+    column_str = ', '.join(columns)
+    query = f'SELECT {column_str} FROM resolution WHERE contract_id IN {contract_db.to_sql_list(ids)}'
+    res = contract_db.get_contract_db().cursor().execute(query).fetchall()
+
+    resolution = {row[0]: row[1] for row in res}
+    missing_resolution = set(ids) - set(resolution.keys())
+    resolution.update({cid: None for cid in missing_resolution})
+    return resolution
+
+
+def _get_contract_resolution_raw(ids: t.List[int]) -> t.Dict[int, t.Optional[float]]:
     resolution: t.Dict[int, t.Optional[float]] = {}
 
     contracts = pi_trading_lib.data.contracts.get_contracts(ids)
@@ -89,5 +107,30 @@ def audit_resolutions():
     pi_trading_lib.timers.report_timers()
 
 
+# ========================= Updates =========================
+@pi_trading_lib.timers.timer
+def update_contract_resolutions():
+    all_contracts = pi_trading_lib.data.contracts.get_contracts()
+    db_resolutions = _get_contract_resolution_db(list(all_contracts.keys()))
+    missing_resolutions = [cid for cid, res in db_resolutions.items() if res is None]
+    print(f'{len(missing_resolutions)} contracts missing resolution')
+
+    raw_data_resolution = _get_contract_resolution_raw(missing_resolutions)
+    raw_data_resolution = [(cid, res) for cid, res in raw_data_resolution.items() if res is not None]
+    print(f'Inserting {len(raw_data_resolution)} new entries into resolution db')
+    with contract_db.get_contract_db() as db:
+        db.executemany('INSERT INTO resolution VALUES (?, ?)', (raw_data_resolution))
+
+
 if __name__ == "__main__":
-    audit_resolutions()
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='subparser', required=True)
+
+    audit_parser = subparsers.add_parser('audit', aliases=['a'])
+    update_parser = subparsers.add_parser('update', aliases=['u'])
+
+    args = parser.parse_args()
+    if args.subparser in ['audit', 'a']:
+        audit_resolutions()
+    if args.subparser in ['update', 'u']:
+        update_contract_resolutions()

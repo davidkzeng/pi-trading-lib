@@ -4,8 +4,6 @@ import functools
 import sqlite3
 import typing as t
 
-import subprocess
-
 import pi_trading_lib.data.data_archive
 
 
@@ -29,11 +27,6 @@ def get_contract_db():
 
 
 def initialize_db():
-    db_uri = pi_trading_lib.data.data_archive.get_data_file('contract_db')
-    if not os.path.exists(db_uri):
-        # TODO: Make non interactive
-        subprocess.check_call(['sqlite3', db_uri])
-
     db = get_contract_db()
 
     starting_version = db.cursor().execute('pragma user_version').fetchone()[0]

@@ -56,7 +56,6 @@ def get_contract_ids(name: str) -> t.List[int]:
 
 @pi_trading_lib.timers.timer
 def get_contracts(ids: t.Optional[t.List[int]] = None) -> t.Dict[int, t.Dict]:
-    # TODO: Make this return dict
     if ids is not None and len(ids) == 0:
         return {}
 
