@@ -1,8 +1,6 @@
 use std::collections::VecDeque;
 use std::io::Write;
 
-use csv;
-
 use crate::actor::{self, ActorBuffer, Listener, Provider};
 use crate::base::PIDataState;
 use crate::market_data::md_cache::{DelayedMarketDataCache, MarketDataCache};

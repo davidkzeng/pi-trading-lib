@@ -1,4 +1,4 @@
-pub struct EMA {
+pub struct Ema {
     _alpha: f64,
     _interval_secs: f64,
 }

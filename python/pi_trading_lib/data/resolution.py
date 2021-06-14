@@ -22,9 +22,9 @@ def get_contract_resolution(ids: t.List[int]) -> t.Dict[int, t.Optional[float]]:
                 if resolution[contract_id] is not None:
                     continue
 
-            if final_data['trade_price'] <= 0.03 and final_data['ask_price'] <= 0.03:
+            if (final_data['trade_price'] <= 0.03 and final_data['ask_price'] <= 0.03) or final_data['ask_price'] <= 0.01:
                 resolution[contract_id] = 0.0
-            elif final_data['trade_price'] >= 0.97 and final_data['bid_price'] >= 0.97:
+            elif (final_data['trade_price'] >= 0.97 and final_data['bid_price'] >= 0.97) or final_data['bid_price'] >= 0.99:
                 resolution[contract_id] = 1.0
             else:
                 resolution[contract_id] = None
@@ -64,11 +64,9 @@ def audit_resolutions():
             print(f"{cid}: {recommendation},  # {contract_info['market_id']} {contract_info['end_date']} {full_names[cid]} {final_data['trade_price']} {final_data['bid_price']} {final_data['ask_price']}")
 
     markets = pi_trading_lib.data.contracts.get_markets()
-    markets_ids = [market['id'] for market in markets]
+    markets_ids = list(markets.keys())
     all_market_contracts = pi_trading_lib.data.contracts.get_market_contracts(markets_ids)
     for market_id, market_contract_ids in all_market_contracts.items():
-        # TODO: no need once switch to dict
-        market = pi_trading_lib.data.contracts.get_markets([market_id])[0]
         market_contracts = pi_trading_lib.data.contracts.get_contracts(market_contract_ids)
         if any(market_contract['end_date'] is None for market_contract in market_contracts.values()):
             continue
@@ -81,7 +79,7 @@ def audit_resolutions():
         if num_correct == 0 and len(market_contracts) >= 2:
             if market_id not in NO_CORRECT_CONTRACT_MARKETS:
                 audit_passed = False
-                print(f"{market_id},  # {market['name']}, 0 correct contracts")
+                print(f"{market_id},  # {markets[market_id]['name']}, 0 correct contracts")
 
     if audit_passed:
         print('Audit Passed')

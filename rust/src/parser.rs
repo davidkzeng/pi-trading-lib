@@ -114,10 +114,7 @@ impl<'a> Arg<'a> {
     }
 
     pub fn check_spec(&self) -> Result<(), String> {
-        let has_default = match &self.default {
-            ArgValue::None => true,
-            _ => false,
-        };
+        let has_default = matches!(&self.default, ArgValue::None);
 
         if has_default && self.arg_type == ArgType::Flag {
             return Err("Bad spec".to_owned());

@@ -14,7 +14,7 @@ def contract(args):
 
 def market(args):
     pp = pprint.PrettyPrinter(indent=2)
-    market = pi_trading_lib.data.contracts.get_markets([args.mid])[0]
+    market = pi_trading_lib.data.contracts.get_markets([args.mid])[args.mid]
     pp.pprint(market)
 
     if args.verbose:

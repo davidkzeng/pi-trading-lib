@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Duration, LocalResult, NaiveDateTime, TimeZone, Utc};
 use chrono_tz::US::Eastern;
 use serde_json::Value;
-use ureq;
 
 use crate::base::Status;
 use crate::market_data::{ContractData, MarketData, PIDataPacket};
@@ -11,8 +10,8 @@ use crate::market_data::{ContractData, MarketData, PIDataPacket};
 type JsonMap = serde_json::map::Map<String, Value>;
 
 const TIMESTAMP_TOLERANCE_SECS: i64 = 5 * 60;
-const API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/all/";
-const MARKET_API_ADDRESS: &'static str = "https://www.predictit.org/api/marketdata/markets/{}";
+const API_ADDRESS: &str = "https://www.predictit.org/api/marketdata/all/";
+const MARKET_API_ADDRESS: &str = "https://www.predictit.org/api/marketdata/markets/{}";
 
 #[derive(Debug)]
 pub struct MarketDataError(MarketDataErrorKind);
@@ -36,26 +35,26 @@ pub type MarketDataResult = Result<Option<PIDataPacket>, MarketDataError>;
 
 fn get_field<'a>(map: &'a JsonMap, field: &str) -> Result<&'a Value, MarketDataError> {
     map.get(field)
-        .ok_or(MarketDataError(MarketDataErrorKind::FieldUnavailable(field.to_owned())))
+        .ok_or_else(|| MarketDataError(MarketDataErrorKind::FieldUnavailable(field.to_owned())))
 }
 
 fn get_u64(map: &JsonMap, field: &str) -> Result<u64, MarketDataError> {
     get_field(map, field)?
         .as_u64()
-        .ok_or(MarketDataError::new_field_format_error(field))
+        .ok_or_else(|| MarketDataError::new_field_format_error(field))
 }
 
 fn get_f64(map: &JsonMap, field: &str) -> Result<f64, MarketDataError> {
     get_field(map, field)?
         .as_f64()
-        .ok_or(MarketDataError::new_field_format_error(field))
+        .ok_or_else(|| MarketDataError::new_field_format_error(field))
 }
 
 fn get_f64_or_null_val(map: &JsonMap, field: &str, val: f64) -> Result<f64, MarketDataError> {
     get_f64(map, field).or_else(|_err| {
         get_field(map, field)?
             .as_null()
-            .ok_or(MarketDataError::new_field_format_error(field))
+            .ok_or_else(|| MarketDataError::new_field_format_error(field))
             .map(|_null_val| val)
     })
 }
@@ -63,7 +62,7 @@ fn get_f64_or_null_val(map: &JsonMap, field: &str, val: f64) -> Result<f64, Mark
 fn get_str<'a>(map: &'a JsonMap, field: &str) -> Result<&'a str, MarketDataError> {
     get_field(map, field)?
         .as_str()
-        .ok_or(MarketDataError::new_field_format_error(field))
+        .ok_or_else(|| MarketDataError::new_field_format_error(field))
 }
 
 fn get_string(map: &JsonMap, field: &str) -> Result<String, MarketDataError> {
@@ -73,7 +72,7 @@ fn get_string(map: &JsonMap, field: &str) -> Result<String, MarketDataError> {
 fn get_array<'a>(map: &'a JsonMap, field: &str) -> Result<&'a Vec<Value>, MarketDataError> {
     get_field(map, field)?
         .as_array()
-        .ok_or(MarketDataError::new_field_format_error(field))
+        .ok_or_else(|| MarketDataError::new_field_format_error(field))
 }
 
 fn get_status(status: &str) -> Result<Status, MarketDataError> {
@@ -98,12 +97,12 @@ fn get_contract(contract: &JsonMap) -> Result<ContractData, MarketDataError> {
     })
 }
 
-fn get_contracts(contracts: &Vec<Value>) -> Result<Vec<ContractData>, MarketDataError> {
+fn get_contracts(contracts: &[Value]) -> Result<Vec<ContractData>, MarketDataError> {
     let mut parsed_contracts = Vec::new();
     for contract in contracts {
         let contract_map = contract
             .as_object()
-            .ok_or(MarketDataError::new_field_format_error("contracts[] entry"));
+            .ok_or_else(|| MarketDataError::new_field_format_error("contracts[] entry"));
         parsed_contracts.push(get_contract(contract_map?)?);
     }
     Ok(parsed_contracts)
@@ -209,7 +208,7 @@ pub fn fetch_api_market_data() -> MarketDataResult {
         for market_data in get_array(all_market_data_obj, "markets")? {
             let market_map = market_data
                 .as_object()
-                .ok_or(MarketDataError::new_field_format_error("markets[] entry"))?;
+                .ok_or_else(|| MarketDataError::new_field_format_error("markets[] entry"))?;
             let market = get_market(market_map)?;
             all_market_data_map.insert(market.id, market);
         }

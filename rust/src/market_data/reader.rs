@@ -66,7 +66,7 @@ impl Provider<PIDataPacket> for MarketDataSimJson {
             if bytes_read == 0 {
                 break;
             }
-            self.output.push(serde_json::from_str(&mut self.line_buffer).unwrap());
+            self.output.push(serde_json::from_str(&self.line_buffer).unwrap());
             self.line_buffer.clear();
         }
         &mut self.output

@@ -83,15 +83,23 @@ def get_contracts(ids: t.Optional[t.List[int]] = None) -> t.Dict[int, t.Dict]:
 
 
 @pi_trading_lib.timers.timer
-def get_markets(ids: t.List[int] = []):
+def get_markets(ids: t.List[int] = []) -> t.Dict[int, t.Dict]:
+    columns = ['id', 'name']
+    column_str = ', '.join(columns)
+
     if len(ids) == 0:
-        query = 'SELECT * FROM market'
+        query = f'SELECT {column_str} FROM market'
     else:
-        query = f'SELECT * FROM market WHERE id IN {contract_db.to_sql_list(ids)}'
+        query = f'SELECT {column_str} FROM market WHERE id IN {contract_db.to_sql_list(ids)}'
 
     markets = contract_db.get_contract_db().cursor().execute(query).fetchall()
-    # TODO: Return dict
-    return [{'id': market[0], 'name': market[1]} for market in markets]
+    return {
+        row[0]: {
+            'id': row[0],
+            'name': row[1],
+        }
+        for row in markets
+    }
 
 
 def get_contract_names(ids: t.List[int]) -> t.Dict[int, str]:
@@ -100,11 +108,11 @@ def get_contract_names(ids: t.List[int]) -> t.Dict[int, str]:
     contracts = get_contracts(ids)
     contract_market_ids = list(set(contract['market_id'] for contract in contracts.values()))
     markets = get_markets(contract_market_ids)
-    markets = {market['id']: market['name'] for market in markets}
+    market_names = {market_id: market['name'] for market_id, market in markets.items()}
     contract_name_map = {}
     for contract_id, contract in contracts.items():
         if markets[contract['market_id']] != contract['name']:
-            contract_name_map[contract_id] = markets[contract['market_id']] + ' ' + contract['name']
+            contract_name_map[contract_id] = market_names[contract['market_id']] + ' ' + contract['name']
         else:
             contract_name_map[contract_id] = contract['name']
     return contract_name_map
@@ -256,7 +264,7 @@ def update_contract_info(date):
 
     db_contracts = get_contracts(list(daily_contracts.keys()))
     db_markets = get_markets(list(daily_markets.keys()))
-    missing_markets = set(daily_markets.keys()) - set(market['id'] for market in db_markets)
+    missing_markets = set(daily_markets.keys()) - set(db_markets.keys())
     missing_contracts = set(daily_contracts.keys()) - set(db_contracts.keys())
 
     if len(missing_markets) > 0:
