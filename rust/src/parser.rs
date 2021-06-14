@@ -3,7 +3,7 @@ use std::io::Write;
 use std::iter::{Iterator, Peekable};
 
 pub struct Parser<'a> {
-    arg_map: HashMap<&'a str, Arg<'a>>,
+    arg_map: HashMap<String, Arg<'a>>,
 }
 
 impl<'a> Parser<'a> {
@@ -14,7 +14,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn arg(mut self, arg: Arg<'a>) -> Self {
-        let existing = self.arg_map.insert(arg.name, arg);
+        let existing = self.arg_map.insert(arg.name.clone(), arg);
         assert!(existing.is_none());
         self
     }
@@ -68,7 +68,7 @@ enum ArgValue<'a> {
 }
 
 pub struct Arg<'a> {
-    name: &'a str,
+    name: String,
     arg_type: ArgType,
     default: ArgValue<'a>,
     required: bool,
@@ -81,9 +81,9 @@ pub struct Arg<'a> {
 impl<'a> Arg<'a> {
     // Builder
 
-    pub fn with_name(name: &'a str) -> Self {
+    pub fn with_name(name: &str) -> Self {
         Arg {
-            name,
+            name: name.to_string(),
             arg_type: ArgType::Flag,
             default: ArgValue::None,
             required: false,
@@ -163,7 +163,7 @@ impl<'a> Arg<'a> {
         }
 
         if self.consumed == 0 {
-            Err("No values to parse for: ".to_owned() + self.name)
+            Err("No values to parse for: ".to_owned() + &self.name)
         } else {
             Ok(())
         }

@@ -1,0 +1,1 @@
+# Election model placeholder
