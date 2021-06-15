@@ -6,7 +6,7 @@ import logging
 import pi_trading_lib.date_util as date_util
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
-import pi_trading_lib.logging
+import pi_trading_lib.logging_ext
 
 
 def _run_converter(date, force=False):
@@ -45,7 +45,7 @@ def main():
     args = parser.parse_args()
 
     if args.verbose:
-        pi_trading_lib.logging.init_logging(logging.DEBUG)
+        pi_trading_lib.logging_ext.init_logging(logging.DEBUG)
 
     begin_date = date_util.from_str(args.begin_date)
     end_date = date_util.from_str(args.end_date)

@@ -18,6 +18,7 @@ import pi_trading_lib.states as states
 import pi_trading_lib.data.data_archive as data_archive
 
 CONFIG_FILE = os.path.join(pi_trading_lib.get_package_dir(), 'config/fivethirtyeight.csv')
+START_DATE = '20200816'
 
 
 def archive_csv(location, save_location, date_col, date_format, date, name) -> None:

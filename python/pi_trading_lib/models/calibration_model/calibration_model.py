@@ -1,4 +1,5 @@
-import pi_trading_lib.model
+from pi_trading_lib.model import ReturnModel
 
-class CalibrationModel(pi_trading_lib.model.ReturnModel):
+
+class CalibrationModel(ReturnModel):
     pass
