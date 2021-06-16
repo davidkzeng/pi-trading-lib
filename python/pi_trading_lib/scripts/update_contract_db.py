@@ -3,16 +3,15 @@ import argparse
 import pi_trading_lib.date_util as date_util
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
+import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.data.history as history
 import pi_trading_lib.timers as timers
 
-DATA_START_DATE = '20200817'
-
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--begin-date', default=DATA_START_DATE)
+    parser.add_argument('--begin-date', default=market_data.get_market_data_start())
     parser.add_argument('--end-date')
     parser.add_argument('--data-archive')
 

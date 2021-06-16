@@ -29,6 +29,13 @@ def bad_market_data(date: datetime.date) -> bool:
 
 
 @functools.lru_cache()
+def get_market_data_start() -> datetime.date:
+    begin_date = data_archive.get_begin_date('market_data_csv')
+    assert begin_date is not None
+    return begin_date
+
+
+@functools.lru_cache()
 @pi_trading_lib.timers.timer
 def get_raw_data(date: datetime.date) -> pd.DataFrame:
     """Get raw data for date as dataframe"""
@@ -117,6 +124,8 @@ def get_df(begin_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
     return df
 
 
+@functools.lru_cache()
+@pi_trading_lib.timers.timer
 def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts: t.Optional[t.Tuple[int, ...]] = None) -> pd.DataFrame:
     if isinstance(timestamp, datetime.datetime):
         timestamp_date = timestamp.date()

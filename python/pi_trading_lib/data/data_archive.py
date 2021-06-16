@@ -23,7 +23,7 @@ def get_archive_dir():
 
 
 @functools.lru_cache()
-def _get_data_archives() -> t.Dict[str, str]:
+def _get_data_archives() -> t.Dict[str, t.Tuple[str, t.Optional[datetime.date]]]:
     config_file = os.path.join(pi_trading_lib.get_package_dir(), 'config/data_archive.csv')
 
     data_archives = {}
@@ -32,16 +32,22 @@ def _get_data_archives() -> t.Dict[str, str]:
         for row in reader:
             archive_name = row['name']
             archive_location = os.path.join(get_archive_dir(), row['location'])
-            data_archives[archive_name] = archive_location
+            begin_date = date_util.from_str(row['begin_date']) if row['begin_date'] else None
+            data_archives[archive_name] = archive_location, begin_date
     return data_archives
 
 
 def get_data_file(name: str, template_vals: t.Dict[str, t.Any] = {}) -> str:
     data_archives = _get_data_archives()
-    location_template = data_archives[name]
+    location_template = data_archives[name][0]
 
     if 'date' in template_vals and isinstance(template_vals['date'], datetime.date):
         template_vals['date'] = date_util.to_str(template_vals['date'])
     location = location_template.format(**template_vals)
 
     return location
+
+
+def get_begin_date(name: str) -> t.Optional[datetime.date]:
+    data_archives = _get_data_archives()
+    return data_archives[name][1]
