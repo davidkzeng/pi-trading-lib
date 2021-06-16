@@ -52,6 +52,7 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
 
 @pi_trading_lib.decorators.copy
 @functools.lru_cache()
+@pi_trading_lib.timers.timer
 def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ...]] = None,
                       snapshot_interval: t.Optional[datetime.timedelta] = None) -> pd.DataFrame:
     """
@@ -95,49 +96,13 @@ def get_filtered_data(date: datetime.date, contracts: t.Optional[t.Tuple[int, ..
     return df
 
 
-def add_market_best_price(df: pd.DataFrame):
-    if True:
-        # Try to support this again, maybe prepopulate in rust?
-        # The current problem is that we decoupled market and contract updates
-        df['best_bid_price'] = df['bid_price']
-        df['best_ask_price'] = df['ask_price']
-        return df
-
-    bid_ask_by_market = df.groupby('market_id')[['bid_price', 'ask_price']].sum()
-    contracts_in_market = df.reset_index(drop=False).groupby('market_id')['contract_id'].nunique()
-
-    def get_best_bid(row):
-        """
-        An order to buy contract A at bid_price is the equivalent to an order to sell
-        the complementary contract B as ask_price = 1 - bid_price
-        From our POV: selling contract A at bid_price (buying NO's) is the same as
-        buying contract B at ask_price (buying YES's)
-
-        Currently only supporting binary contracts
-
-        """
-        if contracts_in_market[row['market_id']] == 2:
-            opp_side_bid = 1 - (bid_ask_by_market.at[row['market_id'], 'ask_price'] - row['ask_price'])
-            return max(row['bid_price'], opp_side_bid)
-        else:
-            return row['bid_price']
-
-    def get_best_ask(row):
-        if contracts_in_market[row['market_id']] == 2:
-            opp_side_ask = 1 - (bid_ask_by_market.at[row['market_id'], 'bid_price'] - row['bid_price'])
-            return min(row['ask_price'], opp_side_ask)
-        else:
-            return row['ask_price']
-
-    df['best_bid_price'] = df.apply(lambda row: get_best_bid(row), axis=1, result_type='reduce')
-    df['best_ask_price'] = df.apply(lambda row: get_best_ask(row), axis=1, result_type='reduce')
+def add_mid_price(df: pd.DataFrame) -> pd.DataFrame:
+    df['mid_price'] = (df['bid_price'] + df['ask_price']) / 2
     return df
 
 
-def add_mid_price(df: pd.DataFrame):
-    df['mid_price'] = (df['best_bid_price'] + df['best_ask_price']) / 2
-    df['mid_price_strict'] = (df['bid_price'] + df['ask_price']) / 2
-
+def _annotate(df: pd.DataFrame) -> pd.DataFrame:
+    add_mid_price(df)
     return df
 
 
@@ -148,6 +113,21 @@ def get_df(begin_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
         [get_filtered_data(date, **filter_kwargs) for date in date_util.date_range(begin_date, end_date)],
         axis=0
     )
-    df = add_market_best_price(df)
-    df = add_mid_price(df)
+    df = _annotate(df)
+    return df
+
+
+def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts: t.Optional[t.Tuple[int, ...]] = None) -> pd.DataFrame:
+    if isinstance(timestamp, datetime.datetime):
+        timestamp_date = timestamp.date()
+        df = get_raw_data(timestamp_date).reset_index('contract_id')
+        df = df[df.index.get_level_values('timestamp') < timestamp]
+        df = df.groupby('contract_id').tail(1).reset_index().set_index('contract_id')
+    else:
+        df = get_raw_data(timestamp).reset_index('contract_id')
+        # TODO: maybe don't do this to exclude contracts added intraday
+        df = df.groupby('contract_id').head(1).reset_index().set_index('contract_id')
+    if contracts is not None:
+        df = df.reindex(contracts)
+    df = _annotate(df)
     return df

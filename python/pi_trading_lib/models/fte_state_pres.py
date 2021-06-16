@@ -12,7 +12,6 @@ import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.data.fivethirtyeight as fte
 import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.states as states
-import pi_trading_lib.date_util as date_util
 
 
 STATE_CONTRACTS = 'election_2020/states_pres.json'
@@ -42,17 +41,16 @@ class NaiveModel(PositionModel):
         self.default_params = {
             'variance_weight': 1.0
         }
-        self.state_contract_info = contracts.get_contract_data_by_cid(STATE_CONTRACTS)
-        self.state_contract_ids = self.state_contract_info.keys()
-        self.universe: np.ndarray = self._get_universe(date_util.from_str('20201001'))
+        all_state_contract_info = contracts.get_contract_data_by_cid(STATE_CONTRACTS)
+        self.state_contract_info = {cid: info for cid, info in all_state_contract_info.items()
+                                    if (info[0] not in EXCLUDE_STATES) and (info[1] == 'democratic')}
+        self.state_contract_ids = sorted(self.state_contract_info.keys(), key=lambda cid: self.state_contract_info[cid][0])
+        self.universe: np.ndarray = np.array(list(self.state_contract_ids))
 
     def _get_state_contract_md(self, date: datetime.date) -> pd.DataFrame:
-        state_md = market_data.get_df(date, date, contracts=tuple(self.state_contract_ids),
-                                      snapshot_interval=datetime.timedelta(days=1))
-        contract_info = state_md.index.get_level_values('contract_id').map(self.state_contract_info)
-        state_md['state'] = contract_info.map(lambda info: info[0])
-        state_md_dem = state_md.loc[contract_info.map(lambda info: info[1] == 'democratic'), :]
-        return state_md_dem.reset_index().set_index('state')
+        state_md = market_data.get_snapshot(date, self.state_contract_ids)
+        state_md['state'] = state_md.index.get_level_values('contract_id').map(self.state_contract_info).map(lambda info: info[0])
+        return state_md.reset_index().set_index('state')
 
     def _get_state_contract_model(self, date: datetime.date) -> pd.DataFrame:
         state_model = fte.get_df('pres_state_2020', date, date)
@@ -69,33 +67,25 @@ class NaiveModel(PositionModel):
         state_md = self._get_state_contract_md(date)
 
         state_model = state_model.join(state_md, lsuffix='_model', rsuffix='_md', how='inner')
-        state_model = state_model[~state_model.index.isin(EXCLUDE_STATES)]
-        state_model['buy_edge'] = state_model['winstate_chal'] - state_model['best_ask_price']
-        state_model['sell_edge'] = state_model['best_bid_price'] - state_model['winstate_chal']
+        state_model['buy_edge'] = state_model['winstate_chal'] - state_model['ask_price']
+        state_model['sell_edge'] = state_model['bid_price'] - state_model['winstate_chal']
 
         p_win = state_model['winstate_chal']
         state_model['return_stdev'] = np.sqrt(p_win * (1 - p_win) ** 2 + (1 - p_win) * (0 - p_win) ** 2)
         state_model = state_model.sort_index()
         return state_model.sort_index()
 
-    def _get_universe(self, date: datetime.date) -> np.ndarray:
-        # universe is static
-        sample_model = self._get_state_contract_model(date)
-        return sample_model['contract_id'].to_numpy()  # type: ignore
-
     def get_universe(self, date: datetime.date) -> np.ndarray:
         return self.universe
 
     # OLDTODO: Represent ability to take the same position on either side of contract
     def optimize(self, date: datetime.date, capital: float, cur_position: np.ndarray) -> np.ndarray:
-        print(capital)
-        print(cur_position)
         params = self.default_params
 
         state_model = self._get_state_contract_model(date)
 
         fair_price = state_model['winstate_chal'].to_numpy()
-        price_b, price_s = state_model['best_ask_price'].to_numpy(), (1 - state_model['best_bid_price']).to_numpy()
+        price_b, price_s = state_model['ask_price'].to_numpy(), (1 - state_model['bid_price']).to_numpy()
         price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
         margin_f = state_model['margin_factor'].to_numpy()
         contract_return_stdev = state_model['return_stdev'].to_numpy()
