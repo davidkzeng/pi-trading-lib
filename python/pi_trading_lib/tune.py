@@ -32,6 +32,8 @@ def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[C
         diff = config.diff(override_config)
         print(f'{res:.2f}:      ({diff})')
         print(summary.to_frame().T)
+
+    assert best_override is not None
     print(best_val)
     print(config.diff(best_override))
 
@@ -44,11 +46,12 @@ def guess_type(val: str) -> t.Union[str, float]:
 
     return val
 
+
 def parse_search(search_str: str) -> t.List[t.Dict]:
     tokens = search_str.split('=', 1)
     param = tokens[0]
-    vals = tokens[1].split(',')
-    vals = [guess_type(val) for val in vals]
+    val_tokens = tokens[1].split(',')
+    vals = [guess_type(val) for val in val_tokens]
 
     search = []
     for val in vals:

@@ -20,10 +20,15 @@ class PositionModel(ABC):
         pass
 
 
-class StandardModel:
-    @abstractmethod
-    def optimize(self, config: model_config.Config, date: datetime.date) -> np.ndarray:
-        pass
+class StandardModel(ABC):
+    def get_return(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
+        return None
+
+    def get_factors(self, config: model_config.Config, date: datetime.date) -> t.List[np.ndarray]:
+        return []
+
+    def get_corr(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
+        return None
 
     @abstractmethod
     def get_universe(self, date: datetime.date) -> np.ndarray:

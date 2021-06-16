@@ -1,14 +1,11 @@
 import datetime
-import logging
-# import typing as t
+import typing as t
 
 import numpy as np
 import pandas as pd
 import scipy.stats as st
-import cvxpy as cp
 
-from pi_trading_lib.model import PositionModel, PIPOSITION_LIMIT_VALUE
-import pi_trading_lib.timers
+from pi_trading_lib.model import StandardModel
 import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.model_config as model_config
 import pi_trading_lib.data.fivethirtyeight as fte
@@ -20,7 +17,7 @@ STATE_CONTRACTS = 'election_2020/states_pres.json'
 EXCLUDE_STATES = states.EC_SPECIAL_DISTRICTS + ['ME', 'NE']
 
 
-class NaiveModel(PositionModel):
+class NaiveModel(StandardModel):
     """
     Generates optimal state election portfolio based on FiveThirtyEight state model.
 
@@ -81,60 +78,10 @@ class NaiveModel(PositionModel):
     def get_universe(self, date: datetime.date) -> np.ndarray:
         return self.universe
 
-    # OLDTODO: Represent ability to take the same position on either side of contract
-    @pi_trading_lib.timers.timer
-    def optimize(self, config: model_config.Config, date: datetime.date, capital: float, cur_position: np.ndarray) -> np.ndarray:
+    def get_return(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
         state_model = self._get_state_contract_model(date)
+        return state_model['winstate_chal'].to_numpy()  # type: ignore
 
-        fair_price = state_model['winstate_chal'].to_numpy()
-        price_b, price_s = state_model['ask_price'].to_numpy(), (1 - state_model['bid_price']).to_numpy()
-
-        # widen to reduce trading (even if we could execute as best bid/ask)
-        price_b = price_b + config['election_trading_cost']
-        price_s = price_s + config['election_trading_cost']
-
-        price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
-        margin_f = state_model['margin_factor'].to_numpy()
-        contract_return_stdev = state_model['return_stdev'].to_numpy()
-
-        num_contracts = len(state_model.index)
-
-        # Contracts to sell or buy
-        cur_position_b = np.maximum(np.zeros(num_contracts), cur_position)
-        cur_position_s = np.maximum(np.zeros(num_contracts), cur_position * -1)
-
-        delta_bb, delta_bs, delta_sb, delta_ss = cp.Variable(num_contracts), cp.Variable(num_contracts), cp.Variable(num_contracts), cp.Variable(num_contracts)
-        new_pos = cp.Variable(num_contracts)
-        new_pos_b, new_pos_s = cp.Variable(num_contracts), cp.Variable(num_contracts)
-
-        delta_cap = price_sb @ delta_sb + price_bs @ delta_bs - price_bb @ delta_bb - price_ss @ delta_ss
-        new_cap = capital + delta_cap
-
-        margin_exp = margin_f @ new_pos
-
-        constraints = [
-            new_pos_b >= 0, new_pos_s >= 0,
-            delta_bb >= 0, delta_bs >= 0, delta_ss >= 0, delta_sb >= 0,
-            new_pos_b == cur_position_b + delta_bb - delta_bs,
-            new_pos_s == cur_position_s + delta_ss - delta_sb,
-            new_pos == new_pos_b - new_pos_s,
-            new_cap >= 250,  # Equality should work here too, allow for rounding to work out hopefully
-            cp.multiply(price_b, new_pos) <= PIPOSITION_LIMIT_VALUE, # TODO: this should be base on the value of our current pos + FIFO
-            cp.multiply(-1 * price_s, new_pos) <= PIPOSITION_LIMIT_VALUE,
-        ]
-        exp_return = fair_price @ new_pos_b + (1 - fair_price) @ new_pos_s + new_cap
-        contract_position_stdev = (
-            cp.multiply(new_pos_b, contract_return_stdev) + cp.multiply(new_pos_s, contract_return_stdev)
-        )
-        stdev_return = cp.norm(contract_position_stdev)
-
-        objective = exp_return - config['election_variance_weight'] * stdev_return - config['election_margin_f_weight'] * cp.abs(margin_exp)
-        problem = cp.Problem(cp.Maximize(objective), constraints)
-        problem.solve()
-
-        state_model['buy_amount'] = np.round(new_pos_b.value)
-        state_model['sell_amount'] = np.round(new_pos_s.value)
-
-        logging.debug((exp_return.value, stdev_return.value, margin_exp.value))
-
-        return new_pos.value  # type: ignore
+    def get_factors(self, config: model_config.Config, date: datetime.date) -> t.List[np.ndarray]:
+        state_model = self._get_state_contract_model(date)
+        return [state_model['margin_factor'].to_numpy()]
