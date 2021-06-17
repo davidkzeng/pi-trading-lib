@@ -1,0 +1,73 @@
+import logging
+import typing as t
+
+import numpy as np
+import cvxpy as cp
+
+import pi_trading_lib.model_config as model_config
+from pi_trading_lib.data.market_data import MarketDataSnapshot
+from pi_trading_lib.model import PIPOSITION_LIMIT_VALUE
+from pi_trading_lib.accountant import Book
+
+
+def optimize(book: Book, snapshot: MarketDataSnapshot, return_models: t.List[np.ndarray],
+             factor_models: t.List[np.ndarray], config: model_config.Config) -> np.ndarray:
+    num_contracts = len(book.universe)
+
+    price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
+
+    # widen to reduce trading (even if we could execute as best bid/ask)
+    price_b = price_b + config['trading_cost']
+    price_s = price_s + config['trading_cost']
+
+    price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
+
+    return_model_agg = np.average(np.array(return_models), axis=0)
+
+    # Contracts to sell or buy
+    cur_position = book.position
+    cur_position_b = np.maximum(np.zeros(num_contracts), cur_position)
+    cur_position_s = np.maximum(np.zeros(num_contracts), cur_position * -1)
+
+    delta_bb, delta_bs, delta_sb, delta_ss = cp.Variable(num_contracts), cp.Variable(num_contracts), cp.Variable(num_contracts), cp.Variable(num_contracts)
+    new_pos = cp.Variable(num_contracts)
+    new_pos_b, new_pos_s = cp.Variable(num_contracts), cp.Variable(num_contracts)
+
+    delta_cap = price_sb @ delta_sb + price_bs @ delta_bs - price_bb @ delta_bb - price_ss @ delta_ss
+    new_cap = book.capital + delta_cap
+
+    margin_factors = []
+    for factor_model in factor_models:
+        margin_factors.append(cp.abs(factor_model @ new_pos))
+
+    constraints = [
+        new_pos_b >= 0, new_pos_s >= 0,
+        delta_bb >= 0, delta_bs >= 0, delta_ss >= 0, delta_sb >= 0,
+        new_pos_b == cur_position_b + delta_bb - delta_bs,
+        new_pos_s == cur_position_s + delta_ss - delta_sb,
+        new_pos == new_pos_b - new_pos_s,
+        new_cap >= 250,
+        cp.multiply(price_b, new_pos) <= PIPOSITION_LIMIT_VALUE, # TODO: this should be base on the value of our current pos + FIFO
+        cp.multiply(-1 * price_s, new_pos) <= PIPOSITION_LIMIT_VALUE,
+    ]
+
+    p_win = return_model_agg
+    contract_return_stdev = np.sqrt(p_win * (1 - p_win) ** 2 + (1 - p_win) * (0 - p_win) ** 2)
+    contract_position_stdev = (
+        cp.multiply(new_pos_b, contract_return_stdev) + cp.multiply(new_pos_s, contract_return_stdev)
+    )
+    stdev_return = cp.norm(contract_position_stdev)
+
+    obj_factor = -1 * cp.sum(margin_factors)
+    obj_return = return_model_agg @ new_pos_b + (1 - return_model_agg) @ new_pos_s + new_cap
+    obj_std = -1 * config['std_penalty'] * stdev_return
+
+    objective = obj_return + obj_std + obj_factor
+    problem = cp.Problem(cp.Maximize(objective), constraints)
+    problem.solve()
+
+    logging.debug((obj_return.value, obj_std.value, obj_factor.value))
+
+    pos_mult = config['position_size_mult']
+    rounded_new_pos = np.around(new_pos.value / pos_mult) * pos_mult
+    return rounded_new_pos  # type: ignore

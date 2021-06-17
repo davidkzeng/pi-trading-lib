@@ -44,7 +44,7 @@ class NaiveModel(StandardModel):
         self.universe: np.ndarray = np.array(list(self.state_contract_ids))
 
     def _get_state_contract_md(self, date: datetime.date) -> pd.DataFrame:
-        state_md = market_data.get_snapshot(date, tuple(self.state_contract_ids))
+        state_md = market_data.get_snapshot(date, tuple(self.state_contract_ids)).data
         state_md['state'] = state_md.index.get_level_values('contract_id').map(self.state_contract_info).map(lambda info: info[0])
         return state_md.reset_index().set_index('state')
 
@@ -84,4 +84,4 @@ class NaiveModel(StandardModel):
 
     def get_factors(self, config: model_config.Config, date: datetime.date) -> t.List[np.ndarray]:
         state_model = self._get_state_contract_model(date)
-        return [state_model['margin_factor'].to_numpy()]
+        return [config['election_margin_f_weight'] * state_model['margin_factor'].to_numpy()]

@@ -124,9 +124,19 @@ def get_df(begin_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
     return df
 
 
+class MarketDataSnapshot:
+    data: pd.DataFrame
+
+    def __init__(self, data: pd.DataFrame):
+        self.data = data
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+
 @functools.lru_cache()
 @pi_trading_lib.timers.timer
-def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts: t.Optional[t.Tuple[int, ...]] = None) -> pd.DataFrame:
+def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts: t.Optional[t.Tuple[int, ...]] = None) -> MarketDataSnapshot:
     if isinstance(timestamp, datetime.datetime):
         timestamp_date = timestamp.date()
         df = get_raw_data(timestamp_date).reset_index('contract_id')
@@ -139,4 +149,4 @@ def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts
     if contracts is not None:
         df = df.reindex(contracts)
     df = _annotate(df)
-    return df
+    return MarketDataSnapshot(df)
