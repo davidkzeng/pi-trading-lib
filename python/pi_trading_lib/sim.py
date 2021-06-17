@@ -38,7 +38,7 @@ def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: mod
 
     new_pos = optimizer.optimize(book, md_sod, [price_model], [], [factor_model], config)
 
-    book.apply_position_change(new_pos.to_numpy(), md_sod)
+    book.apply_position_change(new_pos, md_sod)
     book.set_mark_price(md_sod['trade_price'])
     logging.debug(f'\n{book.get_summary()}\n')
 

@@ -35,10 +35,10 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 
     agg_price_model = np.nanmean(np.array(price_models), axis=0)
-    np.putmask(agg_price_model, np.isnan(agg_price_model), snapshot['mid_price'])
+    agg_price_model[np.isnan(agg_price_model)] = snapshot['mid_price'][np.isnan(agg_price_model)]
 
     # Contracts to sell or buy
-    cur_position = np_ext.reindex(book.position, book.universe.cids, snapshot.universe)
+    cur_position = pd.Series(book.position, index=book.universe.cids).reindex(snapshot.universe).to_numpy()
     cur_position_b = np.maximum(np.zeros(num_contracts), cur_position)
     cur_position_s = np.maximum(np.zeros(num_contracts), cur_position * -1)
 

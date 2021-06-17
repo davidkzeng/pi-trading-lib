@@ -11,6 +11,8 @@ from pi_trading_lib.data.market_data import MarketDataSnapshot
 
 class PositionChange:
     def __init__(self, cur_pos: np.ndarray, new_pos: np.ndarray):
+        assert len(cur_pos) == len(new_pos)
+
         self.size = len(cur_pos)
 
         self.cur_pos = cur_pos
@@ -111,13 +113,14 @@ class Book:
         self.mark_price = np.zeros(self.universe.size)
         self.recompute()
 
-    def apply_position_change(self, new_pos: np.ndarray, snapshot: MarketDataSnapshot):
-        new_pos = new_pos.astype(int)
-        new_pos = self.universe.reindex(new_pos, snapshot.universe)
-        bid_price = snapshot['bid_price'].reindex(self.universe.cids).to_numpy()
-        ask_price = snapshot['ask_price'].reindex(self.universe.cids).to_numpy()
+    def apply_position_change(self, new_pos: pd.Series, snapshot: MarketDataSnapshot):
+        assert np.all(new_pos.index == snapshot.universe)
+
+        new_pos = new_pos.reindex(self.universe.cids).to_numpy()
         change = PositionChange(self.position, new_pos)
 
+        bid_price = snapshot['bid_price'].reindex(self.universe.cids).to_numpy()
+        ask_price = snapshot['ask_price'].reindex(self.universe.cids).to_numpy()
         missing_price = np.isnan(bid_price)
         assert not np.any(missing_price & (change.diff != 0)), "position change with missing price snapshot"
 
@@ -143,7 +146,7 @@ class Book:
         if len(diff) == 0:
             return
 
-        removed = set(self.universe.cids) - set(new_cids)
+        removed = set(self.universe.cids[self.position != 0]) - set(new_cids)
 
         old_size = self.universe.size
         self.universe.update_cids(new_cids)
@@ -159,7 +162,7 @@ class Book:
             logging.info(f'Liquiditating positions for {removed}')
             new_pos = pd.Series(self.position.copy(), index=self.universe.cids)
             new_pos.loc[list(removed)] = 0
-            new_pos = new_pos.reindex(snapshot.universe).to_numpy()
+            new_pos = new_pos.reindex(snapshot.universe)
             self.apply_position_change(new_pos, snapshot)
 
         self.recompute()
