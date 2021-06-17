@@ -1,4 +1,3 @@
-import typing as t
 import os
 import tempfile
 import shutil
@@ -6,16 +5,25 @@ import logging
 import atexit
 
 
-class WorkDir:
-    def __init__(self, root: t.Optional[str] = None):
-        if root is None:
-            root = tempfile.mkdtemp()
-            atexit.register(self.cleanup)
+_work_dir = os.environ.get('PI_WORK_DIR')
 
-        self.root = root
-        logging.info("Using work directory %s" % self.root)
 
-    def cleanup(self):
-        if os.path.exists(self.root):
-            logging.info("Cleaning up work directory %s" % self.root)
-            shutil.rmtree(self.root)
+def set_work_dir(loc: str):
+    global _work_dir
+    _work_dir = loc
+
+
+def get_work_dir():
+    global _work_dir
+
+    if _work_dir is None:
+        _work_dir = tempfile.mkdtemp()
+        atexit.register(cleanup)
+
+    return _work_dir
+
+
+def cleanup():
+    if os.path.exists(_work_dir):
+        logging.info("Cleaning up work directory %s" % _work_dir)
+        shutil.rmtree(_work_dir)

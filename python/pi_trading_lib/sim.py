@@ -1,6 +1,7 @@
 import argparse
 import logging
 import datetime
+import sys
 
 import numpy as np
 
@@ -14,29 +15,35 @@ import pi_trading_lib.optimizer as optimizer
 import pi_trading_lib.logging_ext as logging_ext
 from pi_trading_lib.accountant import PositionChange, Book
 from pi_trading_lib.models.fte_election import NaiveModel
-from pi_trading_lib.model import StandardModel
+from pi_trading_lib.model import Model
 
 
-def optimize_date(model: StandardModel, cur_date: datetime.date, book: Book, config: model_config.Config):
-    universe = book.universe
+@pi_trading_lib.timers.timer
+def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: model_config.Config):
+    universe_cids = book.universe.cids
 
     eod = datetime.datetime.combine(cur_date, datetime.time.max)
-    md = market_data.get_snapshot(eod, tuple(universe.tolist()))
-    md_sod = market_data.get_snapshot(cur_date, tuple(universe.tolist()))
+    md = market_data.get_snapshot(eod, tuple(universe_cids.tolist()))
+    md_sod = market_data.get_snapshot(cur_date, tuple(universe_cids.tolist()))
 
-    return_model = model.get_return(config, cur_date)
-    assert return_model is not None
-    factor_models = model.get_factors(config, cur_date)
+    model_universe = model.get_universe(cur_date)
+    price_model = model.get_price(config, cur_date)
+    assert price_model is not None
+    factor_model = model.get_factor(config, cur_date)
+    assert factor_model is not None
 
-    new_pos = optimizer.optimize(book, md_sod, [return_model], factor_models, config)
+    price_model = book.universe.rebroadcast(price_model, model_universe)
+    factor_model = book.universe.rebroadcast(factor_model, model_universe)
+
+    new_pos = optimizer.optimize(book, md_sod, [price_model], [], [factor_model], config)
     position_change = PositionChange(book.position, new_pos)
-    book.apply_position_change(position_change, md['bid_price'], md['ask_price'])
+    book.apply_position_change(position_change, md)
     book.set_mark_price(md['trade_price'])
     logging.debug(f'\n{book.get_summary()}\n')
 
 
 @pi_trading_lib.timers.timer
-def daily_sim(model: StandardModel, begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
+def daily_sim(model: Model, begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
     universe = model.get_universe(begin_date)
     book = Book(universe, config['capital'])
 
@@ -54,13 +61,13 @@ def daily_sim(model: StandardModel, begin_date: datetime.date, end_date: datetim
     return book.value, book.get_summary()
 
 
-def main():
+def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('config')
     parser.add_argument('--search')
     parser.add_argument('--debug', action='store_true')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.debug:
         logging_ext.init_logging(level=logging.DEBUG)
@@ -82,4 +89,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

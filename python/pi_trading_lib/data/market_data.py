@@ -5,6 +5,7 @@ import datetime
 import functools
 
 import pandas as pd
+import numpy as np
 
 import pi_trading_lib.data.data_archive as data_archive
 import pi_trading_lib.date_util as date_util
@@ -126,9 +127,11 @@ def get_df(begin_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
 
 class MarketDataSnapshot:
     data: pd.DataFrame
+    universe: np.ndarray
 
     def __init__(self, data: pd.DataFrame):
         self.data = data
+        self.universe = self.data.index.get_level_values(0).to_numpy()
 
     def __getitem__(self, key):
         return self.data[key]

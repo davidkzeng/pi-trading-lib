@@ -5,11 +5,11 @@ import numpy as np
 import pandas as pd
 import scipy.stats as st
 
-from pi_trading_lib.model import StandardModel
+from pi_trading_lib.model import Model
 import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.model_config as model_config
 import pi_trading_lib.data.fivethirtyeight as fte
-import pi_trading_lib.data.contracts as contracts
+import pi_trading_lib.data.contract_groups as contract_groups
 import pi_trading_lib.states as states
 
 
@@ -17,7 +17,7 @@ STATE_CONTRACTS = 'election_2020/states_pres.json'
 EXCLUDE_STATES = states.EC_SPECIAL_DISTRICTS + ['ME', 'NE']
 
 
-class NaiveModel(StandardModel):
+class NaiveModel(Model):
     """
     Generates optimal state election portfolio based on FiveThirtyEight state model.
 
@@ -37,7 +37,7 @@ class NaiveModel(StandardModel):
     """
 
     def __init__(self):
-        all_state_contract_info = contracts.get_contract_data_by_cid(STATE_CONTRACTS)
+        all_state_contract_info = contract_groups.get_contract_data(STATE_CONTRACTS)
         self.state_contract_info = {cid: info for cid, info in all_state_contract_info.items()
                                     if (info[0] not in EXCLUDE_STATES) and (info[1] == 'democratic')}
         self.state_contract_ids = sorted(self.state_contract_info.keys(), key=lambda cid: self.state_contract_info[cid][0])
@@ -78,10 +78,10 @@ class NaiveModel(StandardModel):
     def get_universe(self, date: datetime.date) -> np.ndarray:
         return self.universe
 
-    def get_return(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
+    def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
         state_model = self._get_state_contract_model(date)
         return state_model['winstate_chal'].to_numpy()  # type: ignore
 
-    def get_factors(self, config: model_config.Config, date: datetime.date) -> t.List[np.ndarray]:
+    def get_factor(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
         state_model = self._get_state_contract_model(date)
-        return [config['election_margin_f_weight'] * state_model['margin_factor'].to_numpy()]
+        return state_model['margin_factor'].to_numpy()  # type: ignore

@@ -5,6 +5,7 @@ import pandas as pd
 
 import pi_trading_lib.numpy_ext as np_ext
 import pi_trading_lib.data.contracts
+from pi_trading_lib.data.market_data import MarketDataSnapshot
 
 
 class PositionChange:
@@ -31,10 +32,38 @@ class PositionChange:
         return np.abs(self.diff)  # type: ignore
 
 
+class Universe:
+    cids: np.ndarray
+    names: t.List[str]
+    mapping: t.Dict[int, int]
+    size: int
+
+    def __init__(self, cids: np.ndarray):
+        assert cids.ndim == 1
+        self.cids = cids
+        self.size = len(cids)
+        name_map = pi_trading_lib.data.contracts.get_contract_names(self.cids.tolist())
+        self.names = [name_map[cid] for cid in self.cids]
+        self.mapping = Universe.get_map(self.cids)
+
+    @staticmethod
+    def get_map(cids: np.ndarray) -> t.Dict[int, int]:
+        return {x: index[0] for index, x in np.ndenumerate(cids)}
+
+    @pi_trading_lib.timers.timer
+    def rebroadcast(self, arr: np.ndarray, src_universe: np.ndarray) -> np.ndarray:
+        assert arr.ndim == 1
+        assert arr.shape == src_universe.shape
+
+        vget = np.vectorize(self.mapping.__getitem__)
+        new_idxs = vget(src_universe)
+        target_arr = np.empty(self.size)
+        target_arr[new_idxs] = arr
+        return target_arr  # type: ignore
+
+
 class Book:
-    universe: np.ndarray
-    universe_names: t.List[str]
-    num_contracts: int
+    universe: Universe
     capital: float
     position: np.ndarray
     mark_price: np.ndarray
@@ -42,27 +71,28 @@ class Book:
     exe_qty: np.ndarray
     exe_value: np.ndarray
 
-    def __init__(self, universe: np.ndarray, capital: float, initial_pos: t.Optional[np.ndarray] = None, mark_price: t.Optional[np.ndarray] = None):
-        self.universe = universe
-        contract_names = pi_trading_lib.data.contracts.get_contract_names(self.universe.tolist())
-        self.universe_names = [contract_names[cid] for cid in self.universe]
-        self.num_contracts = len(self.universe)
+    def __init__(self, cids: np.ndarray, capital: float, initial_pos: t.Optional[np.ndarray] = None, mark_price: t.Optional[np.ndarray] = None):
+        self.universe = Universe(cids)
         self.capital = capital
 
         if initial_pos is None:
-            initial_pos = np.zeros(self.num_contracts)
+            initial_pos = np.zeros(self.universe.size)
         self.position = initial_pos
 
         if mark_price is None:
-            mark_price = np.zeros(self.num_contracts)
+            mark_price = np.zeros(self.universe.size)
 
-        self.exe_qty = np.zeros(self.num_contracts)
-        self.exe_value = np.zeros(self.num_contracts)
+        self.exe_qty = np.zeros(self.universe.size)
+        self.exe_value = np.zeros(self.universe.size)
         self.set_mark_price(mark_price)
         self.recompute()
 
-    def apply_position_change(self, change: PositionChange, bid_price: np.ndarray, ask_price: np.ndarray):
-        assert len(bid_price) == len(ask_price) == change.size == self.num_contracts
+    def apply_position_change(self, change: PositionChange, snapshot: MarketDataSnapshot):
+        assert len(snapshot.universe) == len(self.universe.cids)
+
+        bid_price = snapshot['bid_price']
+        ask_price = snapshot['ask_price']
+
         # We assume here that liquidity at TOB is enough to implement the position change
         change_cost = change.sb_qty * (1 - ask_price) - change.bb_qty * ask_price + change.bs_qty * bid_price - change.ss_qty * (1 - bid_price)
         self.capital += np.sum(change_cost)
@@ -72,7 +102,7 @@ class Book:
         self.recompute()
 
     def set_mark_price(self, mark_price: np.ndarray):
-        assert len(mark_price) == self.num_contracts
+        assert len(mark_price) == self.universe.size
         self.mark_price = mark_price
         self.recompute()
 
@@ -86,8 +116,8 @@ class Book:
             'val': self.mark_value,
             'exe_qty': self.exe_qty,
             'exe_val': self.exe_value,
-            'name': self.universe_names,
-        }, index=self.universe)
+            'name': self.universe.names,
+        }, index=self.universe.cids)
         return summary_contracts
 
     def get_summary(self) -> pd.Series:

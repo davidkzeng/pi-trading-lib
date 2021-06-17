@@ -8,11 +8,16 @@ import pi_trading_lib.model_config as model_config
 from pi_trading_lib.data.market_data import MarketDataSnapshot
 from pi_trading_lib.model import PIPOSITION_LIMIT_VALUE
 from pi_trading_lib.accountant import Book
+import pi_trading_lib.timers
 
 
-def optimize(book: Book, snapshot: MarketDataSnapshot, return_models: t.List[np.ndarray],
-             factor_models: t.List[np.ndarray], config: model_config.Config) -> np.ndarray:
-    num_contracts = len(book.universe)
+@pi_trading_lib.timers.timer
+def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[np.ndarray],
+             return_models: t.List[np.ndarray], factor_models: t.List[np.ndarray],
+             config: model_config.Config) -> np.ndarray:
+    assert return_models is not None  # unused
+
+    num_contracts = book.universe.size
 
     price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
 
@@ -22,7 +27,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, return_models: t.List[np.
 
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 
-    return_model_agg = np.average(np.array(return_models), axis=0)
+    agg_price_model = np.average(np.array(price_models), axis=0)
 
     # Contracts to sell or buy
     cur_position = book.position
@@ -51,7 +56,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, return_models: t.List[np.
         cp.multiply(-1 * price_s, new_pos) <= PIPOSITION_LIMIT_VALUE,
     ]
 
-    p_win = return_model_agg
+    p_win = agg_price_model
     contract_return_stdev = np.sqrt(p_win * (1 - p_win) ** 2 + (1 - p_win) * (0 - p_win) ** 2)
     contract_position_stdev = (
         cp.multiply(new_pos_b, contract_return_stdev) + cp.multiply(new_pos_s, contract_return_stdev)
@@ -59,7 +64,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, return_models: t.List[np.
     stdev_return = cp.norm(contract_position_stdev)
 
     obj_factor = -1 * cp.sum(margin_factors)
-    obj_return = return_model_agg @ new_pos_b + (1 - return_model_agg) @ new_pos_s + new_cap
+    obj_return = agg_price_model @ new_pos_b + (1 - agg_price_model) @ new_pos_s + new_cap
     obj_std = -1 * config['std_penalty'] * stdev_return
 
     objective = obj_return + obj_std + obj_factor

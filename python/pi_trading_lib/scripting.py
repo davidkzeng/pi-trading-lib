@@ -3,7 +3,6 @@
 from datetime import date, datetime, timedelta
 from logging import WARN
 
-from pi_trading_lib.work_dir import WorkDir
 import pi_trading_lib.data.data_archive as data_archive
 import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.data.fivethirtyeight as fte
