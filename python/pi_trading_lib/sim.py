@@ -13,20 +13,18 @@ import pi_trading_lib.model_config as model_config
 import pi_trading_lib.tune as tune
 import pi_trading_lib.optimizer as optimizer
 import pi_trading_lib.logging_ext as logging_ext
-from pi_trading_lib.accountant import PositionChange, Book
+from pi_trading_lib.accountant import Book
 from pi_trading_lib.models.fte_election import NaiveModel
 from pi_trading_lib.model import Model
 
 
 @pi_trading_lib.timers.timer
 def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: model_config.Config):
-    universe_cids = book.universe.cids
-
-    eod = datetime.datetime.combine(cur_date, datetime.time.max)
-    md = market_data.get_snapshot(eod, tuple(universe_cids.tolist()))
-    md_sod = market_data.get_snapshot(cur_date, tuple(universe_cids.tolist()))
-
+    md_sod = market_data.get_snapshot(cur_date, tuple(book.universe.tolist()))
     model_universe = model.get_universe(cur_date)
+    book.update_universe(model_universe, md_sod)
+    md_sod = market_data.get_snapshot(cur_date, tuple(book.universe.tolist()))
+
     price_model = model.get_price(config, cur_date)
     assert price_model is not None
     factor_model = model.get_factor(config, cur_date)
@@ -36,16 +34,14 @@ def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: mod
     factor_model = book.universe.rebroadcast(factor_model, model_universe)
 
     new_pos = optimizer.optimize(book, md_sod, [price_model], [], [factor_model], config)
-    position_change = PositionChange(book.position, new_pos)
-    book.apply_position_change(position_change, md)
-    book.set_mark_price(md['trade_price'])
+    book.apply_position_change(new_pos, md_sod)
+    book.set_mark_price(md_sod['trade_price'])
     logging.debug(f'\n{book.get_summary()}\n')
 
 
 @pi_trading_lib.timers.timer
 def daily_sim(model: Model, begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
-    universe = model.get_universe(begin_date)
-    book = Book(universe, config['capital'])
+    book = Book(np.array([], dtype=int), config['capital'])
 
     for cur_date in date_util.date_range(begin_date, end_date):
         if market_data.bad_market_data(cur_date):
@@ -53,8 +49,8 @@ def daily_sim(model: Model, begin_date: datetime.date, end_date: datetime.date, 
 
         optimize_date(model, cur_date, book, config)
 
-    contract_res = pi_trading_lib.data.resolution.get_contract_resolution(universe.tolist())
-    final_pos_res = np.array([contract_res[cid] for cid in universe.tolist()])
+    contract_res = pi_trading_lib.data.resolution.get_contract_resolution(book.universe.tolist())
+    final_pos_res = np.array([contract_res[cid] for cid in book.universe.tolist()])
     book.set_mark_price(final_pos_res)
     print(book)
 

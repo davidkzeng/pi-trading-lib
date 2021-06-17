@@ -18,6 +18,8 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[np.n
     assert return_models is not None  # unused
 
     num_contracts = book.universe.size
+    print(num_contracts)
+    print(snapshot.universe.size)
 
     price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
 
@@ -27,7 +29,8 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[np.n
 
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 
-    agg_price_model = np.average(np.array(price_models), axis=0)
+    agg_price_model = np.nanmean(np.array(price_models), axis=0)
+    np.putmask(agg_price_model, np.isnan(agg_price_model), snapshot['mid_price'])
 
     # Contracts to sell or buy
     cur_position = book.position
@@ -43,11 +46,12 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[np.n
 
     margin_factors = []
     for factor_model in factor_models:
+        factor_model = np.nan_to_num(factor_model)
         margin_factors.append(cp.abs(factor_model @ new_pos))
 
     constraints = [
         new_pos_b >= 0, new_pos_s >= 0,
-        delta_bb >= 0, delta_bs >= 0, delta_ss >= 0, delta_sb >= 0,
+        delta_bb >= 0, delta_bs >= 0, delta_ss >= 1, delta_sb >= 0,
         new_pos_b == cur_position_b + delta_bb - delta_bs,
         new_pos_s == cur_position_s + delta_ss - delta_sb,
         new_pos == new_pos_b - new_pos_s,
