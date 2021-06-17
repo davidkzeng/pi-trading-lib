@@ -15,15 +15,16 @@ class PositionChange:
 
         self.cur_pos = cur_pos
         self.new_pos = new_pos
-        self.diff = np.round(self.new_pos - self.cur_pos)
+        self.new_pos[np.isnan(self.new_pos)] = self.cur_pos[np.isnan(self.new_pos)]
+        self.diff = self.new_pos - self.cur_pos
         self.b_qty = np_ext.pos(self.diff)
         self.s_qty = -np_ext.neg(self.diff)
 
-        self.bb_qty = np.minimum(self.b_qty, np_ext.pos(new_pos))
-        self.sb_qty = np.minimum(self.b_qty, -np_ext.neg(cur_pos))
+        self.bb_qty = np.minimum(self.b_qty, np_ext.pos(self.new_pos))
+        self.sb_qty = np.minimum(self.b_qty, -np_ext.neg(self.cur_pos))
 
-        self.bs_qty = np.minimum(self.s_qty, np_ext.pos(cur_pos))
-        self.ss_qty = np.minimum(self.s_qty, -np_ext.neg(new_pos))
+        self.bs_qty = np.minimum(self.s_qty, np_ext.pos(self.cur_pos))
+        self.ss_qty = np.minimum(self.s_qty, -np_ext.neg(self.new_pos))
 
         assert (self.b_qty - self.s_qty == self.diff).all()
         assert (self.bb_qty + self.sb_qty == self.b_qty).all()
@@ -56,14 +57,10 @@ class Universe:
         return {x: index[0] for index, x in np.ndenumerate(cids)}
 
     @pi_trading_lib.timers.timer
-    def rebroadcast(self, arr: np.ndarray, src_universe: np.ndarray) -> np.ndarray:
-        assert arr.ndim == 1
-        assert arr.shape == src_universe.shape
-
-        new_idxs = self.get_idxs(src_universe)
-        target_arr = np.empty(self.size)
-        target_arr[new_idxs] = arr
-        return target_arr  # type: ignore
+    def reindex(self, arr: np.ndarray, src_universe: np.ndarray) -> np.ndarray:
+        if np.all(src_universe == self.cids):
+            return arr
+        return np_ext.reindex(arr, src_universe, self.cids)
 
     def get_idxs(self, universe: np.ndarray) -> np.ndarray:
         vget = np.vectorize(self.mapping.__getitem__)
@@ -108,20 +105,21 @@ class Book:
         self.universe = Universe(cids)
         self.capital = capital
 
-        self.position = np.zeros(self.universe.size)
+        self.position = np.zeros(self.universe.size, dtype=int)
         self.exe_qty = np.zeros(self.universe.size)
         self.exe_value = np.zeros(self.universe.size)
         self.mark_price = np.zeros(self.universe.size)
         self.recompute()
 
     def apply_position_change(self, new_pos: np.ndarray, snapshot: MarketDataSnapshot):
+        new_pos = new_pos.astype(int)
+        new_pos = self.universe.reindex(new_pos, snapshot.universe)
+        bid_price = snapshot['bid_price'].reindex(self.universe.cids).to_numpy()
+        ask_price = snapshot['ask_price'].reindex(self.universe.cids).to_numpy()
         change = PositionChange(self.position, new_pos)
 
-        bid_price = self.universe.rebroadcast(snapshot['bid_price'], snapshot.universe)
-        ask_price = self.universe.rebroadcast(snapshot['ask_price'], snapshot.universe)
-
         missing_price = np.isnan(bid_price)
-        assert not np.any(missing_price & (change.diff != 0)), "position change with price snapshot"
+        assert not np.any(missing_price & (change.diff != 0)), "position change with missing price snapshot"
 
         # We assume here that liquidity at TOB is enough to implement the position change
         change_cost = np.nan_to_num(change.sb_qty * (1 - ask_price) - change.bb_qty * ask_price + change.bs_qty * bid_price - change.ss_qty * (1 - bid_price), 0.0)
@@ -131,9 +129,9 @@ class Book:
         self.exe_value += np.abs(change_cost)
         self.recompute()
 
-    def set_mark_price(self, mark_price: np.ndarray):
-        assert len(mark_price) == self.universe.size
-        self.mark_price = mark_price
+    def set_mark_price(self, mark_price: pd.Series):
+        mark_price = mark_price.reindex(self.universe.cids).to_numpy()
+        self.mark_price[~np.isnan(mark_price)] = mark_price[~np.isnan(mark_price)]
         self.recompute()
 
     def recompute(self):
@@ -159,9 +157,9 @@ class Book:
 
         if len(removed) > 0:
             logging.info(f'Liquiditating positions for {removed}')
-            remove_idxs = self.universe.get_idxs(np.array(list(removed)))
-            new_pos = self.position
-            new_pos[remove_idxs] = 0
+            new_pos = pd.Series(self.position.copy(), index=self.universe.cids)
+            new_pos.loc[list(removed)] = 0
+            new_pos = new_pos.reindex(snapshot.universe).to_numpy()
             self.apply_position_change(new_pos, snapshot)
 
         self.recompute()

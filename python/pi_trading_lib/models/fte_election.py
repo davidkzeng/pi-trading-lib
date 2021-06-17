@@ -41,7 +41,7 @@ class NaiveModel(Model):
         self.state_contract_info = {cid: info for cid, info in all_state_contract_info.items()
                                     if (info[0] not in EXCLUDE_STATES) and (info[1] == 'democratic')}
         self.state_contract_ids = sorted(self.state_contract_info.keys(), key=lambda cid: self.state_contract_info[cid][0])
-        self.universe: np.ndarray = np.array(list(self.state_contract_ids))
+        self.universe: np.ndarray = np.sort(np.array(list(self.state_contract_ids)))
 
     def _get_state_contract_md(self, date: datetime.date) -> pd.DataFrame:
         state_md = market_data.get_snapshot(date, tuple(self.state_contract_ids)).data
@@ -72,16 +72,17 @@ class NaiveModel(Model):
         state_model = state_model.set_index('state')
         state_md = self._get_state_contract_md(date)
         state_model = state_model.join(state_md, lsuffix='_model', rsuffix='_md', how='inner')
-
-        return state_model.sort_index()
+        state_model = state_model.reset_index().set_index('contract_id')
+        state_model = state_model.reindex(self.get_universe(date))
+        return state_model
 
     def get_universe(self, date: datetime.date) -> np.ndarray:
         return self.universe
 
-    def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
+    def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
         state_model = self._get_state_contract_model(date)
-        return state_model['winstate_chal'].to_numpy()  # type: ignore
+        return state_model['winstate_chal']  # type: ignore
 
-    def get_factor(self, config: model_config.Config, date: datetime.date) -> t.Optional[np.ndarray]:
+    def get_factor(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
         state_model = self._get_state_contract_model(date)
-        return state_model['margin_factor'].to_numpy()  # type: ignore
+        return state_model['margin_factor']  # type: ignore

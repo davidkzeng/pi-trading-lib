@@ -2,9 +2,11 @@ import logging
 import typing as t
 
 import numpy as np
+import pandas as pd
 import cvxpy as cp
 
 import pi_trading_lib.model_config as model_config
+import pi_trading_lib.numpy_ext as np_ext
 from pi_trading_lib.data.market_data import MarketDataSnapshot
 from pi_trading_lib.model import PIPOSITION_LIMIT_VALUE
 from pi_trading_lib.accountant import Book
@@ -12,14 +14,17 @@ import pi_trading_lib.timers
 
 
 @pi_trading_lib.timers.timer
-def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[np.ndarray],
-             return_models: t.List[np.ndarray], factor_models: t.List[np.ndarray],
-             config: model_config.Config) -> np.ndarray:
+def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.Series],
+             return_models: t.List[pd.Series], factor_models: t.List[pd.Series],
+             config: model_config.Config) -> pd.Series:
     assert return_models is not None  # unused
 
-    num_contracts = book.universe.size
+    num_contracts = len(snapshot.data)
     print(num_contracts)
-    print(snapshot.universe.size)
+    for pm in price_models:
+        assert len(pm) == num_contracts
+    for fm in factor_models:
+        assert len(fm) == num_contracts
 
     price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
 
@@ -33,7 +38,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[np.n
     np.putmask(agg_price_model, np.isnan(agg_price_model), snapshot['mid_price'])
 
     # Contracts to sell or buy
-    cur_position = book.position
+    cur_position = np_ext.reindex(book.position, book.universe.cids, snapshot.universe)
     cur_position_b = np.maximum(np.zeros(num_contracts), cur_position)
     cur_position_s = np.maximum(np.zeros(num_contracts), cur_position * -1)
 
@@ -79,4 +84,4 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[np.n
 
     pos_mult = config['position_size_mult']
     rounded_new_pos = np.around(new_pos.value / pos_mult) * pos_mult
-    return rounded_new_pos  # type: ignore
+    return pd.Series(rounded_new_pos, index=snapshot.universe)  # type: ignore

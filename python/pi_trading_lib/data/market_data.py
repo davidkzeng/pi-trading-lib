@@ -136,6 +136,10 @@ class MarketDataSnapshot:
     def __getitem__(self, key):
         return self.data[key]
 
+    def reindex(self, target_universe: np.ndarray) -> 'MarketDataSnapshot':
+        new_data = self.data.reindex(target_universe)
+        return MarketDataSnapshot(new_data)
+
 
 @functools.lru_cache()
 @pi_trading_lib.timers.timer
@@ -150,6 +154,6 @@ def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts
         # TODO: maybe don't do this to exclude contracts added intraday
         df = df.groupby('contract_id').head(1).reset_index().set_index('contract_id')
     if contracts is not None:
-        df = df.reindex(contracts)
+        df = df.reindex(list(set(contracts)))
     df = _annotate(df)
     return MarketDataSnapshot(df)
