@@ -6,7 +6,6 @@ import pandas as pd
 import cvxpy as cp
 
 import pi_trading_lib.model_config as model_config
-import pi_trading_lib.numpy_ext as np_ext
 from pi_trading_lib.data.market_data import MarketDataSnapshot
 from pi_trading_lib.model import PIPOSITION_LIMIT_VALUE
 from pi_trading_lib.accountant import Book

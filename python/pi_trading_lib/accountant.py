@@ -58,17 +58,6 @@ class Universe:
     def get_map(cids: np.ndarray) -> t.Dict[int, int]:
         return {x: index[0] for index, x in np.ndenumerate(cids)}
 
-    @pi_trading_lib.timers.timer
-    def reindex(self, arr: np.ndarray, src_universe: np.ndarray) -> np.ndarray:
-        if np.all(src_universe == self.cids):
-            return arr
-        return np_ext.reindex(arr, src_universe, self.cids)
-
-    def get_idxs(self, universe: np.ndarray) -> np.ndarray:
-        vget = np.vectorize(self.mapping.__getitem__)
-        idxs = vget(universe)
-        return idxs  # type: ignore
-
     def tolist(self) -> t.List[int]:
         return self.cids.tolist()  # type: ignore
 
@@ -86,9 +75,9 @@ class Universe:
             self.mapping.update(new_mapping)
 
         self.size = len(self.cids)
-        self.active = np.zeros(self.size, dtype=bool)
-        active_cid_idxs = self.get_idxs(cids)
-        self.active[active_cid_idxs] = True
+        active = pd.Series(np.zeros(self.size, dtype=bool), index=self.cids)
+        active.loc[cids] = True
+        self.active = active
 
     def __str__(self):
         return str(self.cids)

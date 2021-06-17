@@ -131,7 +131,7 @@ class MarketDataSnapshot:
 
     def __init__(self, data: pd.DataFrame):
         self.data = data
-        self.universe = self.data.index.get_level_values(0).to_numpy()
+        self.universe = self.data.index.to_numpy()
 
     def __getitem__(self, key):
         return self.data[key]
