@@ -19,23 +19,27 @@ def sample_date(date: datetime.date, config: model_config.Config):
     global bucket_counts, bucket_yes, bucket_sum
 
     snapshot = market_data.get_snapshot(date).data
-    contracts = snapshot.index.get_level_values(0).tolist()
+    contracts = snapshot.index.tolist()
+
     binary_contract_map = pi_trading_lib.data.contracts.is_binary_contract(contracts)
     binary_contracts = [cid for cid, val in binary_contract_map.items() if val]
+    snapshot = snapshot[~snapshot.index.get_level_values(0).isin(binary_contracts)]
+    contracts = snapshot.index.tolist()
+
     resolutions = resolution.get_contract_resolution(contracts)
     resolutions = pd.Series(resolutions, name='resolution')
-    resampled = resampled.join(resolutions)
-    resampled = resampled.dropna()
-    resampled = resampled[~resampled.index.get_level_values(0).isin(binary_contracts)]
-    for idx, row in resampled.iterrows():
+    snapshot = snapshot.join(resolutions)
+    snapshot = snapshot.dropna()
+
+    for idx, row in snapshot.iterrows():
         samples.append((idx, row['market_id'], row['trade_price'], row['resolution']))
-    resampled['bucket'] = (resampled['trade_price'] * buckets).astype(int)
-    date_counts = resampled.groupby('bucket').count()['resolution'] #???
-    yes_counts = resampled[resampled['resolution'] >= 1].groupby('bucket').count()['resolution'] #???
+    snapshot['bucket'] = (snapshot['trade_price'] * buckets).astype(int)
+    date_counts = snapshot.groupby('bucket').count()['resolution'] #???
+    yes_counts = snapshot[snapshot['resolution'] >= 1].groupby('bucket').count()['resolution'] #???
     bucket_counts = bucket_counts + date_counts.reindex(bucket_counts.index).fillna(0.0)
     bucket_yes = bucket_yes + yes_counts.reindex(bucket_counts.index).fillna(0).astype(int)
-    bucket_sum = bucket_sum + resampled.groupby('bucket')['trade_price'].sum().reindex(bucket_counts.index).fillna(0.0)
-    unique_ids = resampled.reset_index().groupby('bucket')['contract_id'].agg(['unique'])['unique'].tolist()
+    bucket_sum = bucket_sum + snapshot.groupby('bucket')['trade_price'].sum().reindex(bucket_counts.index).fillna(0.0)
+    unique_ids = snapshot.reset_index().groupby('bucket')['contract_id'].agg(['unique'])['unique'].tolist()
     for idx, bu in enumerate(unique_ids):
         bucket_ids[idx] = bucket_ids[idx] | set(bu.tolist())
 
@@ -62,11 +66,11 @@ def compute(px, sample_df):
 def run():
     market_id = np.random.choice(sample_df_a['market_id'].unique(), size=len(sample_df_a['market_id'].unique() // 2))
     sample_df_copy = sample_df_a.set_index('market_id').loc[market_id].reset_index()
-    resampled = sample_df_copy.groupby('market_id').sample(n=600, replace=True)
-    print(resampled.shape)
+    snapshot = sample_df_copy.groupby('market_id').sample(n=600, replace=True)
+    print(snapshot.shape)
     for px in range(1, 100, 1):
         real_px = px / 100
-        a, b = compute(real_px, resampled)
+        a, b = compute(real_px, snapshot)
         res.append(a)
         idxs.append(b)
 

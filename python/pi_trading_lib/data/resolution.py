@@ -1,29 +1,37 @@
 import argparse
 import typing as t
+import datetime
 
 import pi_trading_lib.decorators
 import pi_trading_lib.data.contracts
 import pi_trading_lib.data.contract_db as contract_db
 import pi_trading_lib.data.market_data as market_data
+import pi_trading_lib.date_util as date_util
 from pi_trading_lib.data.resolution_data import CONTRACT_RESOLUTIONS, UNRESOLVED_CONTRACTS, NO_CORRECT_CONTRACT_MARKETS
 
 
-@pi_trading_lib.decorators.memoize_mapping()
 @pi_trading_lib.timers.timer
-def get_contract_resolution(ids: t.List[int]) -> t.Dict[int, t.Optional[float]]:
-    resolution = _get_contract_resolution_db(ids)
+def get_contract_resolution(ids: t.List[int], date: t.Optional[datetime.date] = None) -> t.Dict[int, t.Optional[float]]:
+    resolution = _get_contract_resolution_db(ids, date)
     return resolution
 
 
-def _get_contract_resolution_db(ids: t.List[int]) -> t.Dict[int, t.Optional[float]]:
-    columns = ['contract_id', 'value']
+def _get_contract_resolution_db(ids: t.List[int], date: t.Optional[datetime.date]) -> t.Dict[int, t.Optional[float]]:
+    columns = ['contract_id', 'value', 'end_date']
     column_str = ', '.join(columns)
-    query = f'SELECT {column_str} FROM resolution WHERE contract_id IN {contract_db.to_sql_list(ids)}'
+    query = f'''
+    SELECT {column_str} FROM resolution
+    INNER JOIN contract ON resolution.contract_id = contract.id
+    WHERE contract_id IN {contract_db.to_sql_list(ids)}
+    '''
     res = contract_db.get_contract_db().cursor().execute(query).fetchall()
 
     resolution = {row[0]: row[1] for row in res}
+    resolution_dates = {row[0]: datetime.date.fromisoformat(row[2]) for row in res}
     missing_resolution = set(ids) - set(resolution.keys())
     resolution.update({cid: None for cid in missing_resolution})
+    if date is not None:
+        resolution.update({cid: None for cid, end_date in resolution_dates.items() if end_date > date})
     return resolution
 
 
@@ -108,6 +116,7 @@ def audit_resolutions():
 
 
 # ========================= Updates =========================
+
 @pi_trading_lib.timers.timer
 def update_contract_resolutions():
     all_contracts = pi_trading_lib.data.contracts.get_contracts()

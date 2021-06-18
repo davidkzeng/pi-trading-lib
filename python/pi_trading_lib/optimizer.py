@@ -19,7 +19,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     assert return_models is not None  # unused
 
     num_contracts = len(snapshot.data)
-    print(num_contracts)
+
     for pm in price_models:
         assert len(pm) == num_contracts
     for fm in factor_models:

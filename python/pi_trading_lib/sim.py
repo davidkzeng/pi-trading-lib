@@ -21,10 +21,16 @@ from pi_trading_lib.model import Model
 
 @pi_trading_lib.timers.timer
 def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: model_config.Config):
-    # TODO: add resolved contracts as 0/1
+    # TODO: add resolved contracts as 0/1 to market data snapshot
     model_universe = model.get_universe(cur_date)
     daily_universe = np.sort(model_universe)
-    md_sod = market_data.get_snapshot(cur_date, tuple(set(book.universe.tolist() + daily_universe.tolist())))
+    combined_universe = tuple(set(book.universe.tolist() + daily_universe.tolist()))
+    md_sod = market_data.get_snapshot(cur_date, combined_universe)
+    resolutions = pi_trading_lib.data.resolution.get_contract_resolution(combined_universe, date=cur_date)
+    resolutions = {cid: res for cid, res in resolutions.items() if res is not None}
+    assert len(set(daily_universe) & set(resolutions.keys())) == 0
+
+    book.apply_resolutions(resolutions)
     book.update_universe(daily_universe, md_sod)
 
     price_model = model.get_price(config, cur_date)

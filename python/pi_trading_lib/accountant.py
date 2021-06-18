@@ -100,7 +100,21 @@ class Book:
         self.exe_qty = np.zeros(self.universe.size)
         self.exe_value = np.zeros(self.universe.size)
         self.mark_price = np.zeros(self.universe.size)
-        self.recompute()
+        self.net_cost = np.zeros(self.universe.size)
+        self.mark_pnl = np.zeros(self.universe.size)
+
+        self._recompute()
+
+    def _recompute(self):
+        self.net_cost = np.around(self.net_cost, decimals=2)
+        self.mark_value = self.mark_price * np_ext.pos(self.position) + (1 - self.mark_price) * -np_ext.neg(self.position)
+        self.value = np.sum(self.mark_value) + self.capital
+        self.mark_pnl = self.mark_value - self.net_cost
+
+    def set_mark_price(self, mark_price: pd.Series):
+        mark_price = mark_price.reindex(self.universe.cids).to_numpy()
+        self.mark_price[~np.isnan(mark_price)] = mark_price[~np.isnan(mark_price)]
+        self._recompute()
 
     def apply_position_change(self, new_pos: pd.Series, snapshot: MarketDataSnapshot):
         assert np.all(new_pos.index == snapshot.universe)
@@ -114,21 +128,26 @@ class Book:
         assert not np.any(missing_price & (change.diff != 0)), "position change with missing price snapshot"
 
         # We assume here that liquidity at TOB is enough to implement the position change
-        change_cost = np.nan_to_num(change.sb_qty * (1 - ask_price) - change.bb_qty * ask_price + change.bs_qty * bid_price - change.ss_qty * (1 - bid_price), 0.0)
-        self.capital += np.sum(change_cost)
+        change_cost = -1 * np.nan_to_num(change.sb_qty * (1 - ask_price) - change.bb_qty * ask_price + change.bs_qty * bid_price - change.ss_qty * (1 - bid_price), 0.0)
+        self.capital -= np.sum(change_cost)
         self.position = change.new_pos
         self.exe_qty += change.exe_qty()
         self.exe_value += np.abs(change_cost)
-        self.recompute()
+        self.net_cost += change_cost
+        self._recompute()
 
-    def set_mark_price(self, mark_price: pd.Series):
-        mark_price = mark_price.reindex(self.universe.cids).to_numpy()
-        self.mark_price[~np.isnan(mark_price)] = mark_price[~np.isnan(mark_price)]
-        self.recompute()
+    def apply_resolutions(self, resolutions: t.Dict[int, int]):
+        resolution_ser = pd.Series(resolutions, name='resolution')
+        resolution_ser = resolution_ser.reindex(self.universe.cids).to_numpy()
 
-    def recompute(self):
-        self.mark_value = self.mark_price * np_ext.pos(self.position) + (1 - self.mark_price) * -np_ext.neg(self.position)
-        self.value = np.sum(self.mark_value) + self.capital
+        resolution_value = (
+            np.nan_to_num((self.position * resolution_ser) * (self.position > 0)) +
+            np.nan_to_num((-1 * self.position * (1 - resolution_ser)) * (self.position < 0))
+        )
+        self.capital += np.sum(resolution_value)
+        self.position[~np.isnan(resolution_ser)] = 0
+        self.net_cost -= resolution_value
+        self._recompute()
 
     def update_universe(self, new_cids: np.ndarray, snapshot: MarketDataSnapshot):
         diff = set(self.universe.cids) ^ set(new_cids)
@@ -146,6 +165,7 @@ class Book:
             self.exe_qty = np.pad(self.exe_qty, (0, new_contracts), 'constant')
             self.exe_value = np.pad(self.exe_value, (0, new_contracts), 'constant')
             self.mark_price = np.pad(self.mark_price, (0, new_contracts), 'constant')
+            self.net_cost = np.pad(self.net_cost, (0, new_contracts), 'constant')
 
         if len(removed) > 0:
             logging.info(f'Liquiditating positions for {removed}')
@@ -154,7 +174,7 @@ class Book:
             new_pos = new_pos.reindex(snapshot.universe)
             self.apply_position_change(new_pos, snapshot)
 
-        self.recompute()
+        self._recompute()
 
     def get_contract_summary(self) -> pd.DataFrame:
         summary_contracts = pd.DataFrame({
@@ -162,6 +182,7 @@ class Book:
             'val': self.mark_value,
             'exe_qty': self.exe_qty,
             'exe_val': self.exe_value,
+            'mark_pnl': self.mark_pnl,
             'name': self.universe.names,
         }, index=self.universe.cids)
         return summary_contracts
@@ -173,6 +194,8 @@ class Book:
             'value': self.value,
             'exe_qty': np.sum(self.exe_qty),
             'exe_val': np.sum(self.exe_value),
+            'net_cost': np.sum(self.net_cost),
+            'mark_pnl': np.sum(self.mark_pnl),
         })
         return summary
 
@@ -180,5 +203,5 @@ class Book:
         summary_contracts, summary = self.get_contract_summary(), self.get_summary()
         res = str(summary_contracts)
         res += "\n"
-        res += str(summary)
+        res += str(summary.to_frame().T)
         return res
