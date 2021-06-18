@@ -12,7 +12,11 @@ def to_str(date: datetime.date) -> str:
     return date.strftime(STANDARD_DATE_FORMAT)
 
 
-def date_range(begin_date: datetime.date, end_date: datetime.date) -> t.Generator[datetime.date, None, None]:
+def date_range(begin_date: datetime.date, end_date: datetime.date,
+               skip_dates: t.List[datetime.date] = []) -> t.Generator[datetime.date, None, None]:
     num_dates = (end_date - begin_date).days + 1
     for i in range(num_dates):
-        yield begin_date + datetime.timedelta(days=i)
+        next_date = begin_date + datetime.timedelta(days=i)
+        if next_date in skip_dates:
+            continue
+        yield next_date

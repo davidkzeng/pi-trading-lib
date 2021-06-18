@@ -34,3 +34,25 @@ def memoize_mapping(keys_only=True):
                 return _map
         return decorated_func
     return memoize_mapping_decorator
+
+
+def _hashable(val):
+    if isinstance(val, list) or isinstance(val, dict):
+        return frozenset(val)
+    return val
+
+
+def memoize():
+    def memoize_decorator(func):
+        _memo_map = {}
+
+        def decorated_func(*args):
+            key = frozenset(_hashable(arg) for arg in args)
+            if key in _memo_map:
+                return _memo_map[key]
+            res = func(*args)
+            _memo_map[key] = res
+            return res
+
+        return decorated_func
+    return memoize_decorator

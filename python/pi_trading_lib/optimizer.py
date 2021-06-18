@@ -71,7 +71,8 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     )
     stdev_return = cp.norm(contract_position_stdev)
 
-    obj_factor = -1 * cp.sum(margin_factors)
+    # add constant for when margin_factors is empty to ensure obj_factor has type Expr
+    obj_factor = -1 * cp.sum(margin_factors) + cp.expressions.constants.Constant(0)
     obj_return = agg_price_model @ new_pos_b + (1 - agg_price_model) @ new_pos_s + new_cap
     obj_std = -1 * config['std_penalty'] * stdev_return
 
@@ -79,6 +80,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     problem = cp.Problem(cp.Maximize(objective), constraints)
     problem.solve()
 
+    print(type(obj_return), type(obj_std), type(obj_factor))
     logging.debug((obj_return.value, obj_std.value, obj_factor.value))
 
     pos_mult = config['position_size_mult']

@@ -6,7 +6,6 @@ import pi_trading_lib.decorators
 import pi_trading_lib.data.contracts
 import pi_trading_lib.data.contract_db as contract_db
 import pi_trading_lib.data.market_data as market_data
-import pi_trading_lib.date_util as date_util
 from pi_trading_lib.data.resolution_data import CONTRACT_RESOLUTIONS, UNRESOLVED_CONTRACTS, NO_CORRECT_CONTRACT_MARKETS
 
 

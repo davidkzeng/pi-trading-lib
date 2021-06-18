@@ -14,6 +14,9 @@ class Config:
             return self.params == other.params
         return False
 
+    def __hash__(self):
+        return hash(frozenset(self.params))
+
     def override(self, override_vals: t.Dict[str, t.Any]) -> 'Config':
         assert set(override_vals).issubset(set(self.params))
         new_params = {

@@ -2,6 +2,7 @@ import argparse
 import logging
 import datetime
 import sys
+import typing as t
 
 import numpy as np
 import pandas as pd
@@ -16,14 +17,16 @@ import pi_trading_lib.optimizer as optimizer
 import pi_trading_lib.logging_ext as logging_ext
 from pi_trading_lib.accountant import Book
 from pi_trading_lib.models.fte_election import NaiveModel
+from pi_trading_lib.models.calibration import CalibrationModel
 from pi_trading_lib.model import Model
 
 
 @pi_trading_lib.timers.timer
-def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: model_config.Config):
-    # TODO: add resolved contracts as 0/1 to market data snapshot
-    model_universe = model.get_universe(cur_date)
-    daily_universe = np.sort(model_universe)
+def optimize_date(models: t.List[Model], cur_date: datetime.date, book: Book, config: model_config.Config):
+    model_universes = [model.get_universe(cur_date) for model in models]
+    model_universe = np.concatenate(model_universes)
+    daily_universe = np.sort(np.unique(model_universe))
+
     combined_universe = tuple(set(book.universe.tolist() + daily_universe.tolist()))
     md_sod = market_data.get_snapshot(cur_date, combined_universe)
     resolutions = pi_trading_lib.data.resolution.get_contract_resolution(combined_universe, date=cur_date)
@@ -33,16 +36,20 @@ def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: mod
     book.apply_resolutions(resolutions)
     book.update_universe(daily_universe, md_sod)
 
-    price_model = model.get_price(config, cur_date)
-    assert price_model is not None
-    factor_model = model.get_factor(config, cur_date)
-    assert factor_model is not None
+    price_models = []
+    factor_models = []
+    for model in models:
+        price_model = model.get_price(config, cur_date)
+        factor_model = model.get_factor(config, cur_date)
+        if price_model is not None:
+            price_model = price_model.reindex(daily_universe)
+            price_models.append(price_model)
+        if factor_model is not None:
+            factor_model = factor_model.reindex(daily_universe)
+            factor_models.append(factor_model)
 
-    price_model = price_model.reindex(daily_universe)
-    factor_model = factor_model.reindex(daily_universe)
     md_sod = md_sod.reindex(daily_universe)
-
-    new_pos = optimizer.optimize(book, md_sod, [price_model], [], [factor_model], config)
+    new_pos = optimizer.optimize(book, md_sod, price_models, [], factor_models, config)
 
     book.apply_position_change(new_pos, md_sod)
     book.set_mark_price(md_sod['trade_price'])
@@ -50,14 +57,14 @@ def optimize_date(model: Model, cur_date: datetime.date, book: Book, config: mod
 
 
 @pi_trading_lib.timers.timer
-def daily_sim(model: Model, begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
+def daily_sim(models: t.List[Model], begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
     book = Book(np.array([], dtype=int), config['capital'])
 
     for cur_date in date_util.date_range(begin_date, end_date):
         if market_data.bad_market_data(cur_date):
             continue
 
-        optimize_date(model, cur_date, book, config)
+        optimize_date(models, cur_date, book, config)
 
     contract_res = pi_trading_lib.data.resolution.get_contract_resolution(book.universe.tolist())
     final_pos_res = np.array([contract_res[cid] for cid in book.universe.tolist()])
@@ -81,9 +88,13 @@ def main(argv):
 
     config = model_config.get_config(args.config)
     naive_model = NaiveModel()
+    calibration_model = CalibrationModel()
+
+    # models = [naive_model, calibration_model]
+    models = [naive_model, calibration_model]
 
     def run_sim(sim_config: model_config.Config):
-        return daily_sim(naive_model, date_util.from_str(config['begin_date']),
+        return daily_sim(models, date_util.from_str(config['begin_date']),
                          date_util.from_str(config['end_date']), sim_config)
 
     if args.search:

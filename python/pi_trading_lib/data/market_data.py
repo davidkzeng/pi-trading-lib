@@ -19,14 +19,14 @@ COLUMNS = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 't
 
 
 @functools.lru_cache()
-def _get_missing_market_data_days() -> t.List[str]:
+def missing_market_data_days() -> t.List[datetime.date]:
     with open(data_archive.get_data_file('bad_md_days')) as f:
-        bad_days = [line.rstrip() for line in f]
+        bad_days = [date_util.from_str(line.rstrip()) for line in f]
     return bad_days
 
 
 def bad_market_data(date: datetime.date) -> bool:
-    return date_util.to_str(date) in _get_missing_market_data_days()
+    return date in missing_market_data_days()
 
 
 @functools.lru_cache()
