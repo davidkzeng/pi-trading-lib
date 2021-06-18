@@ -80,7 +80,6 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     problem = cp.Problem(cp.Maximize(objective), constraints)
     problem.solve()
 
-    print(type(obj_return), type(obj_std), type(obj_factor))
     logging.debug((obj_return.value, obj_std.value, obj_factor.value))
 
     pos_mult = config['position_size_mult']

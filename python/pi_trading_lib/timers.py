@@ -2,31 +2,65 @@ import time
 import typing as t
 
 
+_owned_time_stack: t.List[float] = []
+_last_event: float = time.time()
+
+
 class FunctionTimer:
     """Not thread-safe function timer"""
+
     def __init__(self):
-        self.sum = 0.0
+        self.sum_ = 0.0
+        self.owned_sum = 0.0
         self.count = 0
-        self.start_time_stack: t.List[float] = []
+        self.owned_time_stack: t.List[float] = []
+        self.last_event: float = time.time()
 
     def start(self):
-        self.start_time_stack.append(time.time())
+        global _last_event
+
+        start_time = time.time()
+        if len(_owned_time_stack):
+            _owned_time_stack[-1] += start_time - _last_event
+        if len(self.owned_time_stack):
+            self.owned_time_stack[-1] += start_time - self.last_event
+
+        _owned_time_stack.append(0.0)
+        self.owned_time_stack.append(0.0)
+        _last_event = start_time
+        self.last_event = start_time
 
     def stop(self):
-        assert len(self.start_time_stack) > 0
-        self.sample(time.time() - self.start_time_stack.pop())
+        global _last_event
+        assert len(self.owned_time_stack) > 0
+        assert len(_owned_time_stack) > 0
 
-    def sample(self, val):
-        self.sum += val
+        end_time = time.time()
+        _owned_time_stack[-1] += end_time - _last_event
+        self.owned_time_stack[-1] += end_time - self.last_event
+
+        overall_owned_time = _owned_time_stack.pop()
+        func_owned_time = self.owned_time_stack.pop()
+
+        self.sample(func_owned_time, overall_owned_time)
+
+        _last_event = end_time
+        self.last_event = end_time
+
+    def sample(self, val, owned_val):
+        self.sum_ += val
+        self.owned_sum += owned_val
         self.count += 1
 
     def report(self):
         if self.count == 0:
             return None
-        return format(self.sum, '.6f'), format(self.sum / self.count, '.6f'), self.count
+        return (format(self.sum_, '.6f'), format(self.sum_ / self.count, '.6f'),
+                format(self.owned_sum, '.6f'), self.count)
 
     def reset(self):
-        self.sum = 0.0
+        self.sum_ = 0.0
+        self.owned_sum = 0.0
         self.count = 0
 
 
@@ -48,16 +82,15 @@ def timer(func):
 
 
 def report_timers():
-    def print_format(name, sum_, avg, count):
-        print(f'{name:50.50} {sum_:10} {avg:10} {count:<6}')
+    def print_format(name, sum_, avg, owned_sum, count):
+        print(f'{name:50.50} {sum_:10} {avg:10} {owned_sum:10} {count:<6}')
     print('\nTIMERS')
-    print_format('func_name', 'sum', 'avg', 'count')
+    print_format('func_name', 'sum', 'avg', 'owned_sum', 'count')
     print()
     for func_name, timer in _function_timers.items():
         timer_report = timer.report()
         if timer_report is not None:
-            sum_, avg, count = timer_report
-            print_format(func_name, sum_, avg, count)
+            print_format(func_name, *timer_report)
 
 
 def reset_timers():

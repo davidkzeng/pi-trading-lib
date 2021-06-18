@@ -53,7 +53,7 @@ def optimize_date(models: t.List[Model], cur_date: datetime.date, book: Book, co
 
     book.apply_position_change(new_pos, md_sod)
     book.set_mark_price(md_sod['trade_price'])
-    logging.debug(f'\n{book.get_summary()}\n')
+    logging.debug(f'\n{book.get_summary().to_frame().T}')
 
 
 @pi_trading_lib.timers.timer

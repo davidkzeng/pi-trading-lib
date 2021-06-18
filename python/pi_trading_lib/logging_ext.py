@@ -3,7 +3,7 @@ import logging
 
 _LOGGING_SET = False
 
-FORMAT = '[%(asctime)s] [%(levelname)-8s] %(message)s (%(filename)s:%(lineno)s) '
+FORMAT = '[%(asctime)s] [%(levelname)s] (%(filename)s:%(lineno)s) %(message)s'
 
 
 def init_logging(level=logging.INFO):
