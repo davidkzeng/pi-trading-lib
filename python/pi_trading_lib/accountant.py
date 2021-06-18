@@ -149,6 +149,7 @@ class Book:
         self.net_cost -= resolution_value
         self._recompute()
 
+    @pi_trading_lib.timers.timer
     def update_universe(self, new_cids: np.ndarray, snapshot: MarketDataSnapshot):
         diff = set(self.universe.cids) ^ set(new_cids)
         if len(diff) == 0:

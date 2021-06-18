@@ -20,3 +20,7 @@ def date_range(begin_date: datetime.date, end_date: datetime.date,
         if next_date in skip_dates:
             continue
         yield next_date
+
+
+def prev(date: datetime.date) -> datetime.date:
+    return date - datetime.timedelta(days=1)

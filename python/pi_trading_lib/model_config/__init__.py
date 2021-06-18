@@ -15,7 +15,7 @@ class Config:
         return False
 
     def __hash__(self):
-        return hash(frozenset(self.params))
+        return hash(frozenset(self.params.items()))
 
     def override(self, override_vals: t.Dict[str, t.Any]) -> 'Config':
         assert set(override_vals).issubset(set(self.params))
@@ -31,6 +31,12 @@ class Config:
             k: (self.params[k], other.params[k])
             for k in self.params if self.params[k] != other.params[k]
         }
+
+    def component_params(self, component: str) -> 'Config':
+        component_params = {
+            param: val for param, val in self.params.items() if param.startswith(component)
+        }
+        return Config(component_params)
 
 
 def get_config(name) -> Config:

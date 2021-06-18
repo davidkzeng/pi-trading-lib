@@ -45,7 +45,7 @@ def get_raw_data(date: datetime.date) -> pd.DataFrame:
         logging.warn('No raw market data for {date}'.format(date=str(date)))
         md_df = pd.DataFrame([], columns=COLUMNS)
     else:
-        logging.info('Loading market data file %s' % market_data_file)
+        logging.debug('Loading market data file %s' % market_data_file)
         md_df = pd.read_csv(market_data_file)
         md_df['contract_id'] = md_df['id']
         md_df['timestamp'] = pd.to_datetime(md_df['timestamp'], unit='ms')

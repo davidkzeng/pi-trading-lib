@@ -68,9 +68,10 @@ _function_timers: t.Dict[str, FunctionTimer] = {}
 
 
 def timer(func):
-    if func.__name__ not in _function_timers:
-        _function_timers[func.__name__] = FunctionTimer()
-    func_timer = _function_timers[func.__name__]
+    name = func.__module__.split('.', 1)[-1] + '.' + func.__name__
+    if name not in _function_timers:
+        _function_timers[name] = FunctionTimer()
+    func_timer = _function_timers[name]
 
     def decorated_func(*args, **kwargs):
         func_timer.start()

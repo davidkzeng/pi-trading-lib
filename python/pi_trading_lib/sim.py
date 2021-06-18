@@ -18,6 +18,7 @@ import pi_trading_lib.logging_ext as logging_ext
 from pi_trading_lib.accountant import Book
 from pi_trading_lib.models.fte_election import NaiveModel
 from pi_trading_lib.models.calibration import CalibrationModel
+from pi_trading_lib.score import SimScore
 from pi_trading_lib.model import Model
 
 
@@ -31,7 +32,8 @@ def optimize_date(models: t.List[Model], cur_date: datetime.date, book: Book, co
     md_sod = market_data.get_snapshot(cur_date, combined_universe)
     resolutions = pi_trading_lib.data.resolution.get_contract_resolution(combined_universe, date=cur_date)
     resolutions = {cid: res for cid, res in resolutions.items() if res is not None}
-    assert len(set(daily_universe) & set(resolutions.keys())) == 0
+    dead_contracts = set(daily_universe) & set(resolutions.keys())
+    assert len(dead_contracts) == 0, f'Model universe has dead contracts{dead_contracts}'
 
     book.apply_resolutions(resolutions)
     book.update_universe(daily_universe, md_sod)
@@ -57,22 +59,31 @@ def optimize_date(models: t.List[Model], cur_date: datetime.date, book: Book, co
 
 
 @pi_trading_lib.timers.timer
-def daily_sim(models: t.List[Model], begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
+def daily_sim(models: t.List[Model], begin_date: datetime.date, end_date: datetime.date,
+              config: model_config.Config) -> t.Tuple[float, pd.DataFrame, pd.DataFrame]:
     book = Book(np.array([], dtype=int), config['capital'])
+
+    book_summaries = []
 
     for cur_date in date_util.date_range(begin_date, end_date):
         if market_data.bad_market_data(cur_date):
             continue
 
         optimize_date(models, cur_date, book, config)
+        book_summary = book.get_summary()
+        book_summary['date'] = cur_date
+        book_summaries.append(book_summary)
 
-    contract_res = pi_trading_lib.data.resolution.get_contract_resolution(book.universe.tolist())
-    final_pos_res = np.array([contract_res[cid] for cid in book.universe.tolist()])
-    res_series = pd.Series(final_pos_res, index=book.universe.cids)
-    book.set_mark_price(res_series)
-    print(book)
+    daily_summary = pd.DataFrame(book_summaries).set_index('date')
 
-    return book.value, book.get_summary()
+    if config['use_final_res']:
+        contract_res = pi_trading_lib.data.resolution.get_contract_resolution(book.universe.tolist())
+        final_pos_res = np.array([contract_res[cid] for cid in book.universe.tolist()])
+        res_series = pd.Series(final_pos_res, index=book.universe.cids)
+        book.set_mark_price(res_series)
+    logging.info(f'\n{book}')
+
+    return SimScore(book.get_summary(), book.get_contract_summary(), daily_summary)
 
 
 def main(argv):
@@ -90,10 +101,9 @@ def main(argv):
     naive_model = NaiveModel()
     calibration_model = CalibrationModel()
 
-    # models = [naive_model, calibration_model]
     models = [naive_model, calibration_model]
 
-    def run_sim(sim_config: model_config.Config):
+    def run_sim(sim_config: model_config.Config) -> SimScore:
         return daily_sim(models, date_util.from_str(config['begin_date']),
                          date_util.from_str(config['end_date']), sim_config)
 

@@ -1,4 +1,6 @@
 import argparse
+import os
+import json
 import typing as t
 import datetime
 import itertools
@@ -13,14 +15,14 @@ import pi_trading_lib.data.resolution as resolution
 import pi_trading_lib.model_config as model_config
 import pi_trading_lib.timers
 import pi_trading_lib.decorators
+import pi_trading_lib.work_dir as work_dir
+import pi_trading_lib.fs as fs
 # from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
 from pi_trading_lib.model import Model
 
-import pi_trading_lib.data.contract_groups as contract_groups
-import pi_trading_lib.states as states
-
 
 @pi_trading_lib.decorators.memoize()
+@pi_trading_lib.timers.timer
 def sample_date(date: datetime.date, config: model_config.Config):
     snapshot = market_data.get_snapshot(date).data
     contracts = snapshot.index.tolist()
@@ -42,6 +44,7 @@ def sample_date(date: datetime.date, config: model_config.Config):
     return samples
 
 
+@pi_trading_lib.timers.timer
 def sample(begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
     all_samples = []
     for date in date_util.date_range(begin_date, end_date, skip_dates=market_data.missing_market_data_days()):
@@ -53,8 +56,16 @@ def sample(begin_date: datetime.date, end_date: datetime.date, config: model_con
 
 @pi_trading_lib.timers.timer
 def generate_parameters(date: datetime.date, config: model_config.Config) -> t.Dict[int, float]:
+    output = os.path.join(work_dir.get_uri('calibration_model', date_util.to_str(date), config.component_params('calibration_model')), 'model.json')
+
+    if os.path.exists(output):
+        with open(output) as f:
+            d = json.load(f)
+            d = {int(k): float(v) for k, v in d.items()}
+            return d
+
     start_date = date_util.from_str(config['calibration_model_start_date'])
-    samples = sample(start_date, date, config)
+    samples = sample(start_date, date_util.prev(date), config)
 
     sample_df = pd.DataFrame(samples, columns=['market_id', 'trade_price', 'resolution'])
 
@@ -70,6 +81,7 @@ def generate_parameters(date: datetime.date, config: model_config.Config) -> t.D
         result_trade = sample_df['weighted_trade'].sum() / sample_df['weight'].sum()
         calibration_model.append((result_trade, result))
 
+    # hacky calibration script
     calibration_dict = {}
     for i in range(1, 100, 1):
         val = i * 0.01
@@ -82,37 +94,29 @@ def generate_parameters(date: datetime.date, config: model_config.Config) -> t.D
                 calibration_dict[i] = (calibration_model[idx][1] + calibration_model[idx + 1][1]) * 0.5
                 break
 
+    with fs.safe_open(output, 'w+') as f:
+        json.dump(calibration_dict, f)
     return calibration_dict
-
-
-STATE_CONTRACTS = 'election_2020/states_pres.json'
-EXCLUDE_STATES = states.EC_SPECIAL_DISTRICTS + ['ME', 'NE']
 
 
 class CalibrationModel(Model):
     def __init__(self):
-        all_state_contract_info = contract_groups.get_contract_data(STATE_CONTRACTS)
-        self.state_contract_info = {cid: info for cid, info in all_state_contract_info.items()
-                                    if (info[0] not in EXCLUDE_STATES) and (info[1] == 'democratic')}
-        self.state_contract_ids = sorted(self.state_contract_info.keys(), key=lambda cid: self.state_contract_info[cid][0])
-        self.universe: np.ndarray = np.sort(np.array(list(self.state_contract_ids)))
+        pass
 
     def _get_contract_md(self, date: datetime.date) -> pd.DataFrame:
-        state_md = market_data.get_snapshot(date, tuple(self.universe.tolist())).data
-        return state_md
+        snapshot = market_data.get_snapshot(date).data
+        snapshot = snapshot.loc[(snapshot['trade_price'] > 0.01) & (snapshot['trade_price'] < 0.99)]
+        return snapshot
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
-        md = self._get_contract_md(date)
         model = generate_parameters(date, config)
-        md['fair_price'] = md['trade_price'].map(lambda f: model[int(f * 100)])
-
-        print(md['fair_price'])
-        print(md['trade_price'])
-        print(pd.Series(model))
-        return md['fair_price']
+        md = market_data.get_snapshot(date)
+        calibrated_price = md['trade_price'].map(lambda f: model.get(int(f * 100), None))
+        return calibrated_price
 
     def get_universe(self, date: datetime.date) -> np.ndarray:
-        return self.universe
+        model_snapshot = self._get_contract_md(date)
+        return model_snapshot.index.to_numpy()
 
 
 if __name__ == "__main__":

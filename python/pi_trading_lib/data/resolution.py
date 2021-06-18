@@ -30,7 +30,7 @@ def _get_contract_resolution_db(ids: t.List[int], date: t.Optional[datetime.date
     missing_resolution = set(ids) - set(resolution.keys())
     resolution.update({cid: None for cid in missing_resolution})
     if date is not None:
-        resolution.update({cid: None for cid, end_date in resolution_dates.items() if end_date > date})
+        resolution.update({cid: None for cid, end_date in resolution_dates.items() if end_date >= date})
     return resolution
 
 
