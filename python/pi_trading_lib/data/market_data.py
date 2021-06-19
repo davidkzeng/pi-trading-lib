@@ -128,10 +128,15 @@ def get_df(begin_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
 class MarketDataSnapshot:
     data: pd.DataFrame
     universe: np.ndarray
+    time: datetime.datetime
 
-    def __init__(self, data: pd.DataFrame):
+    def __init__(self, data: pd.DataFrame, time: t.Optional[datetime.datetime] = None):
         self.data = data
         self.universe = self.data.index.to_numpy()
+        if time is not None:
+            self.time = time
+        else:
+            self.time = data['timestamp'].max()
 
     def __getitem__(self, key):
         return self.data[key]
@@ -144,11 +149,14 @@ class MarketDataSnapshot:
 @functools.lru_cache()
 @pi_trading_lib.timers.timer
 def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts: t.Optional[t.Tuple[int, ...]] = None) -> MarketDataSnapshot:
+    time: t.Optional[datetime.datetime] = None
+
     if isinstance(timestamp, datetime.datetime):
         timestamp_date = timestamp.date()
         df = get_raw_data(timestamp_date).reset_index('contract_id')
         df = df[df.index.get_level_values('timestamp') < timestamp]
         df = df.groupby('contract_id').tail(1).reset_index().set_index('contract_id')
+        time = timestamp
     else:
         df = get_raw_data(timestamp).reset_index('contract_id')
         # TODO: maybe don't do this to exclude contracts added intraday
@@ -156,4 +164,4 @@ def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts
     if contracts is not None:
         df = df.reindex(list(set(contracts)))
     df = _annotate(df)
-    return MarketDataSnapshot(df)
+    return MarketDataSnapshot(df, time=time)

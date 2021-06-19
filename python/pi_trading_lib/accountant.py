@@ -136,7 +136,7 @@ class Book:
         self.net_cost += change_cost
         self._recompute()
 
-    def apply_resolutions(self, resolutions: t.Dict[int, int]):
+    def apply_resolutions(self, resolutions: t.Dict[int, t.Optional[float]]):
         resolution_ser = pd.Series(resolutions, name='resolution')
         resolution_ser = resolution_ser.reindex(self.universe.cids).to_numpy()
 
@@ -186,10 +186,11 @@ class Book:
             'mark_pnl': self.mark_pnl,
             'name': self.universe.names,
         }, index=self.universe.cids)
+        summary_contracts.index.name = 'cid'
         return summary_contracts
 
-    def get_summary(self) -> pd.Series:
-        summary = pd.Series({
+    def get_summary(self) -> pd.DataFrame:
+        summary = {
             'capital': self.capital,
             'pos_value': np.sum(self.mark_value),
             'value': self.value,
@@ -197,12 +198,13 @@ class Book:
             'exe_val': np.sum(self.exe_value),
             'net_cost': np.sum(self.net_cost),
             'mark_pnl': np.sum(self.mark_pnl),
-        })
-        return summary
+        }
+        summary_df = pd.DataFrame([list(summary.values())], columns=list(summary))
+        return summary_df
 
     def __str__(self):
         summary_contracts, summary = self.get_contract_summary(), self.get_summary()
         res = str(summary_contracts)
         res += "\n"
-        res += str(summary.to_frame().T)
+        res += str(summary)
         return res

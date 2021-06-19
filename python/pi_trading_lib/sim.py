@@ -1,25 +1,27 @@
 import argparse
-import logging
 import datetime
+import logging
+import os
 import sys
 import typing as t
 
 import numpy as np
 import pandas as pd
 
-import pi_trading_lib.data.resolution
-import pi_trading_lib.timers
-import pi_trading_lib.date_util as date_util
-import pi_trading_lib.data.market_data as market_data
-import pi_trading_lib.model_config as model_config
-import pi_trading_lib.tune as tune
-import pi_trading_lib.optimizer as optimizer
-import pi_trading_lib.logging_ext as logging_ext
 from pi_trading_lib.accountant import Book
-from pi_trading_lib.models.fte_election import NaiveModel
-from pi_trading_lib.models.calibration import CalibrationModel
-from pi_trading_lib.score import SimScore
 from pi_trading_lib.model import Model
+from pi_trading_lib.models.calibration import CalibrationModel
+from pi_trading_lib.models.fte_election import NaiveModel
+from pi_trading_lib.score import SimResult
+import pi_trading_lib.data.market_data as market_data
+import pi_trading_lib.data.resolution
+import pi_trading_lib.date_util as date_util
+import pi_trading_lib.logging_ext as logging_ext
+import pi_trading_lib.model_config as model_config
+import pi_trading_lib.optimizer as optimizer
+import pi_trading_lib.timers
+import pi_trading_lib.tune as tune
+import pi_trading_lib.work_dir as work_dir
 
 
 @pi_trading_lib.timers.timer
@@ -55,12 +57,16 @@ def optimize_date(models: t.List[Model], cur_date: datetime.date, book: Book, co
 
     book.apply_position_change(new_pos, md_sod)
     book.set_mark_price(md_sod['trade_price'])
-    logging.debug(f'\n{book.get_summary().to_frame().T}')
+    logging.debug(f'\n{book.get_summary()}')
 
 
 @pi_trading_lib.timers.timer
 def daily_sim(models: t.List[Model], begin_date: datetime.date, end_date: datetime.date,
-              config: model_config.Config) -> t.Tuple[float, pd.DataFrame, pd.DataFrame]:
+              config: model_config.Config) -> SimResult:
+    result_uri = work_dir.get_uri('sim', config, date_1=end_date)
+    if os.path.exists(result_uri):
+        return SimResult.load(result_uri)
+
     book = Book(np.array([], dtype=int), config['capital'])
 
     book_summaries = []
@@ -72,18 +78,21 @@ def daily_sim(models: t.List[Model], begin_date: datetime.date, end_date: dateti
         optimize_date(models, cur_date, book, config)
         book_summary = book.get_summary()
         book_summary['date'] = cur_date
+        book_summary = book_summary.reset_index(drop=True).set_index('date')
         book_summaries.append(book_summary)
 
-    daily_summary = pd.DataFrame(book_summaries).set_index('date')
+    daily_summary = pd.concat(book_summaries)
 
-    if config['use_final_res']:
+    if config['use-final-res']:
         contract_res = pi_trading_lib.data.resolution.get_contract_resolution(book.universe.tolist())
         final_pos_res = np.array([contract_res[cid] for cid in book.universe.tolist()])
-        res_series = pd.Series(final_pos_res, index=book.universe.cids)
+        res_series = pd.Series(final_pos_res, index=book.universe.cids, dtype='float64')
         book.set_mark_price(res_series)
-    logging.info(f'\n{book}')
+    logging.debug(f'\n{book}')
 
-    return SimScore(book.get_summary(), book.get_contract_summary(), daily_summary)
+    result = SimResult(book.get_summary(), book.get_contract_summary(), daily_summary)
+    result.dump(result_uri)
+    return result
 
 
 def main(argv):
@@ -91,27 +100,35 @@ def main(argv):
     parser.add_argument('config')
     parser.add_argument('--search')
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--override')
+    parser.add_argument('--force', action='store_true')
 
     args = parser.parse_args(argv)
 
     if args.debug:
         logging_ext.init_logging(level=logging.DEBUG)
 
+    if args.force:
+        work_dir.cleanup()
+
     config = model_config.get_config(args.config)
-    naive_model = NaiveModel()
-    calibration_model = CalibrationModel()
 
-    models = [naive_model, calibration_model]
+    models = []
+    if config['election-model-enabled']:
+        models.append(NaiveModel())
+    if config['calibration-model-enabled']:
+        models.append(CalibrationModel())
 
-    def run_sim(sim_config: model_config.Config) -> SimScore:
-        return daily_sim(models, date_util.from_str(config['begin_date']),
-                         date_util.from_str(config['end_date']), sim_config)
+    def run_sim(sim_config: model_config.Config) -> SimResult:
+        return daily_sim(models, date_util.from_str(config['sim-begin-date']),
+                         date_util.from_str(config['sim-end-date']), sim_config)
 
     if args.search:
         overrides = tune.parse_search(args.search)
-        tune.grid_search(overrides, run_sim, config)
     else:
-        run_sim(config)
+        overrides = []
+
+    tune.grid_search(config, overrides, run_sim)
 
     pi_trading_lib.timers.report_timers()
 

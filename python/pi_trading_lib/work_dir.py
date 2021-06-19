@@ -1,12 +1,15 @@
 import os
+import datetime
 import tempfile
 import shutil
 import logging
 import atexit
+import typing as t
 
 import mmh3
 
 import pi_trading_lib.model_config as model_config
+import pi_trading_lib.date_util as date_util
 
 
 _work_dir = os.environ.get('PI_WORK_DIR')
@@ -30,11 +33,18 @@ def get_work_dir():
 def strhash(s) -> str:
     params = sorted(s.items())
     param_str = ':'.join([key + ':' + str(value) for key, value in params])
-    return mmh3.hash_bytes(param_str.encode(), 42).hex()
+    return mmh3.hash_bytes(param_str.encode(), 42).hex()  # type: ignore
 
 
-def get_uri(component: str, date, config: model_config.Config) -> str:
-    return os.path.join(get_work_dir(), component, date, strhash(config.params))
+def get_uri(stage: str, config: model_config.Config,
+            date_1: t.Optional[datetime.date] = None, date_2: t.Optional[datetime.date] = None) -> str:
+    stage_suffix = ''
+    if date_1 is not None:
+        stage_suffix = os.path.join(stage_suffix, date_util.to_str(date_1))
+    if date_2 is not None:
+        stage_suffix = os.path.join(stage_suffix, date_util.to_str(date_2))
+
+    return os.path.join(get_work_dir(), stage, stage_suffix, strhash(config.params))
 
 
 def cleanup():

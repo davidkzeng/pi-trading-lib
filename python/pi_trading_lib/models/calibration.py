@@ -7,6 +7,7 @@ import itertools
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 import pi_trading_lib.data.contracts
 import pi_trading_lib.date_util as date_util
@@ -56,16 +57,19 @@ def sample(begin_date: datetime.date, end_date: datetime.date, config: model_con
 
 @pi_trading_lib.timers.timer
 def generate_parameters(date: datetime.date, config: model_config.Config) -> t.Dict[int, float]:
-    output = os.path.join(work_dir.get_uri('calibration_model', date_util.to_str(date), config.component_params('calibration_model')), 'model.json')
+    output = os.path.join(work_dir.get_uri('calibration_model', config.component_params('calibration-model'), date_1=date), 'model.json')
 
     if os.path.exists(output):
         with open(output) as f:
-            d = json.load(f)
-            d = {int(k): float(v) for k, v in d.items()}
+            d_json = json.load(f)
+            d = {int(k): float(v) for k, v in d_json.items()}
             return d
 
-    start_date = date_util.from_str(config['calibration_model_start_date'])
-    samples = sample(start_date, date_util.prev(date), config)
+    if date < date_util.from_str(config['calibration-model-active-date']):
+        return {}
+
+    begin_date = date_util.from_str(config['calibration-model-begin-date'])
+    samples = sample(begin_date, date_util.prev(date), config)
 
     sample_df = pd.DataFrame(samples, columns=['market_id', 'trade_price', 'resolution'])
 
@@ -81,14 +85,14 @@ def generate_parameters(date: datetime.date, config: model_config.Config) -> t.D
         result_trade = sample_df['weighted_trade'].sum() / sample_df['weight'].sum()
         calibration_model.append((result_trade, result))
 
-    # hacky calibration script
+    # hacky calibration script, we should adopt a smarter fitting method
     calibration_dict = {}
     for i in range(1, 100, 1):
         val = i * 0.01
         if val < calibration_model[0][0]:
-            calibration_dict[i] = val
+            calibration_dict[i] = calibration_model[0][1]
         if val > calibration_model[-1][0]:
-            calibration_dict[i] = val
+            calibration_dict[i] = calibration_model[-1][1]
         for idx in range(0, len(calibration_model) - 1):
             if val >= calibration_model[idx][0] and val < calibration_model[idx + 1][0]:
                 calibration_dict[i] = (calibration_model[idx][1] + calibration_model[idx + 1][1]) * 0.5
@@ -105,7 +109,6 @@ class CalibrationModel(Model):
 
     def _get_contract_md(self, date: datetime.date) -> pd.DataFrame:
         snapshot = market_data.get_snapshot(date).data
-        snapshot = snapshot.loc[(snapshot['trade_price'] > 0.01) & (snapshot['trade_price'] < 0.99)]
         return snapshot
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
@@ -116,11 +119,26 @@ class CalibrationModel(Model):
 
     def get_universe(self, date: datetime.date) -> np.ndarray:
         model_snapshot = self._get_contract_md(date)
-        return model_snapshot.index.to_numpy()
+        return model_snapshot.index.to_numpy()  # type: ignore
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('begin_date')
-    parser.add_argument('end_date')
-    assert parser
+
+    parser.add_argument('--begin-date')
+    parser.add_argument('--end-date', required=True)
+
+    args = parser.parse_args()
+
+    default_config = model_config.get_config('calibration_model')
+    if args.begin_date:
+        default_config = default_config.override({'calibration-model-begin-date': args.begin_date})
+
+    parameters = generate_parameters(date_util.from_str(args.end_date), default_config)
+
+    pser = pd.Series(parameters).to_frame()
+    pser.index = pser.index / 100
+    pser['price'] = pser.index
+    print(pser)
+    pser.plot()
+    plt.show()

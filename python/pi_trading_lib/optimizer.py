@@ -28,12 +28,14 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
 
     # widen to reduce trading (even if we could execute as best bid/ask)
-    price_b = price_b + config['trading_cost']
-    price_s = price_s + config['trading_cost']
+    price_b = price_b + config['trading-cost']
+    price_s = price_s + config['trading-cost']
 
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 
-    agg_price_model = np.nanmean(np.array(price_models), axis=0)
+    price_models = price_models + [snapshot['mid_price']]
+    combined_price_models = np.array(price_models, dtype=np.float64)
+    agg_price_model = np.nanmean(combined_price_models, axis=0)
     agg_price_model[np.isnan(agg_price_model)] = snapshot['mid_price'][np.isnan(agg_price_model)]
 
     # Contracts to sell or buy
@@ -74,7 +76,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     # add constant for when margin_factors is empty to ensure obj_factor has type Expr
     obj_factor = -1 * cp.sum(margin_factors) + cp.expressions.constants.Constant(0)
     obj_return = agg_price_model @ new_pos_b + (1 - agg_price_model) @ new_pos_s + new_cap
-    obj_std = -1 * config['std_penalty'] * stdev_return
+    obj_std = -1 * config['std-penalty'] * stdev_return
 
     objective = obj_return + obj_std + obj_factor
     problem = cp.Problem(cp.Maximize(objective), constraints)
@@ -82,6 +84,6 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     logging.debug((obj_return.value, obj_std.value, obj_factor.value))
 
-    pos_mult = config['position_size_mult']
+    pos_mult = config['position-size-mult']
     rounded_new_pos = np.around(new_pos.value / pos_mult) * pos_mult
     return pd.Series(rounded_new_pos, index=snapshot.universe)  # type: ignore

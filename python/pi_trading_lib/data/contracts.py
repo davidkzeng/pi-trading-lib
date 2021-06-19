@@ -68,6 +68,7 @@ def get_contract_names(ids: t.List[int]) -> t.Dict[int, str]:
             contract_name_map[contract_id] = market_names[contract['market_id']] + ' ' + contract['name']
         else:
             contract_name_map[contract_id] = contract['name']
+        contract_name_map[contract_id] = contract_name_map[contract_id].replace(',', '')
     return contract_name_map
 
 

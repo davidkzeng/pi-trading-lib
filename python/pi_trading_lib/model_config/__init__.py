@@ -2,8 +2,11 @@ import importlib
 import typing as t
 
 
+ParamValue = t.Union[str, float, bool]
+
+
 class Config:
-    def __init__(self, params: t.Dict[str, t.Any]):
+    def __init__(self, params: t.Dict[str, ParamValue]):
         self.params = params
 
     def __getitem__(self, key):
@@ -17,7 +20,7 @@ class Config:
     def __hash__(self):
         return hash(frozenset(self.params.items()))
 
-    def override(self, override_vals: t.Dict[str, t.Any]) -> 'Config':
+    def override(self, override_vals: t.Dict[str, ParamValue]) -> 'Config':
         assert set(override_vals).issubset(set(self.params))
         new_params = {
             **self.params,
@@ -25,7 +28,7 @@ class Config:
         }
         return Config(new_params)
 
-    def diff(self, other: 'Config') -> t.Dict[str, t.Tuple[t.Any, t.Any]]:
+    def diff(self, other: 'Config') -> t.Dict[str, t.Tuple[ParamValue, ParamValue]]:
         assert set(self.params) == set(other.params)
         return {
             k: (self.params[k], other.params[k])
@@ -37,6 +40,29 @@ class Config:
             param: val for param, val in self.params.items() if param.startswith(component)
         }
         return Config(component_params)
+
+
+def guess_param_type(val: str) -> ParamValue:
+    if val in ['true', 'True']:
+        return True
+    elif val in ['false', 'False']:
+        return False
+
+    try:
+        return float(val)
+    except ValueError:
+        pass
+
+    return val
+
+
+def override_config(config: Config, override_str: str) -> Config:
+    overrides = override_str.split(':')
+    override_vals: t.Dict[str, ParamValue] = {}
+    for override in overrides:
+        tokens = override.split('=', 1)
+        override_vals[tokens[0]] = guess_param_type(tokens[1])
+    return config.override(override_vals)
 
 
 def get_config(name) -> Config:

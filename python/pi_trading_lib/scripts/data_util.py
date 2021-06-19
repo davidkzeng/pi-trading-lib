@@ -2,14 +2,20 @@ import argparse
 import pprint
 
 import pi_trading_lib.data.contracts
+import pi_trading_lib.data.resolution
+
+
+def print_contract(cid):
+    contract = pi_trading_lib.data.contracts.get_contracts([cid])[cid]
+    contract['full_name'] = pi_trading_lib.data.contracts.get_contract_names([cid])[cid]
+    contract['market_link'] = 'https://www.predictit.org/markets/detail/' + str(contract['market_id'])
+    contract['resolution'] = pi_trading_lib.data.resolution.get_contract_resolution([cid])[cid]
+    pp = pprint.PrettyPrinter(indent=2)
+    pp.pprint(contract)
 
 
 def contract(args):
-    contract = pi_trading_lib.data.contracts.get_contracts([args.cid])[args.cid]
-    contract['full_name'] = pi_trading_lib.data.contracts.get_contract_names([args.cid])[args.cid]
-    contract['market_link'] = 'https://www.predictit.org/markets/detail/' + str(contract['market_id'])
-    pp = pprint.PrettyPrinter(indent=2)
-    pp.pprint(contract)
+    print_contract(args.cid)
 
 
 def market(args):
@@ -20,11 +26,7 @@ def market(args):
     if args.verbose:
         market_contracts = pi_trading_lib.data.contracts.get_market_contracts([args.mid])[args.mid]
         for cid in market_contracts:
-            contract = pi_trading_lib.data.contracts.get_contracts([cid])[cid]
-            contract['full_name'] = pi_trading_lib.data.contracts.get_contract_names([cid])[cid]
-            contract['market_link'] = 'https://www.predictit.org/markets/detail/' + str(contract['market_id'])
-            pp = pprint.PrettyPrinter(indent=2)
-            pp.pprint(contract)
+            print_contract(cid)
 
 
 def main():
