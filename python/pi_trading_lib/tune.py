@@ -44,7 +44,7 @@ def parse_search(search_str: str) -> t.List[t.Dict]:
     tokens = search_str.split('=', 1)
     param = tokens[0]
     val_tokens = tokens[1].split(',')
-    vals = [pi_trading_lib.model_config.guess_param_type(val) for val in val_tokens]
+    vals = [pi_trading_lib.model_config.guess_param_type(val, param) for val in val_tokens]
 
     search = []
     for val in vals:

@@ -1,25 +1,25 @@
 import argparse
-import os
-import json
-import typing as t
 import datetime
 import itertools
+import json
+import os
+import typing as t
 
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
-import pi_trading_lib.data.contracts
-import pi_trading_lib.date_util as date_util
-import pi_trading_lib.data.market_data as market_data
-import pi_trading_lib.data.resolution as resolution
-import pi_trading_lib.model_config as model_config
-import pi_trading_lib.timers
-import pi_trading_lib.decorators
-import pi_trading_lib.work_dir as work_dir
-import pi_trading_lib.fs as fs
 # from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
 from pi_trading_lib.model import Model
+import pi_trading_lib.data.contracts
+import pi_trading_lib.data.market_data as market_data
+import pi_trading_lib.data.resolution as resolution
+import pi_trading_lib.date_util as date_util
+import pi_trading_lib.decorators
+import pi_trading_lib.fs as fs
+import pi_trading_lib.model_config as model_config
+import pi_trading_lib.timers
+import pi_trading_lib.work_dir as work_dir
 
 
 @pi_trading_lib.decorators.memoize()
@@ -114,12 +114,17 @@ class CalibrationModel(Model):
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
         model = generate_parameters(date, config)
         md = market_data.get_snapshot(date)
-        calibrated_price = md['trade_price'].map(lambda f: model.get(int(f * 100), None))
+        # combine with trade_price?
+        calibrated_price = md['mid_price'].map(lambda f: model.get(int(f * 100), None))
         return calibrated_price
 
     def get_universe(self, date: datetime.date) -> np.ndarray:
         model_snapshot = self._get_contract_md(date)
         return model_snapshot.index.to_numpy()  # type: ignore
+
+    @property
+    def name(self) -> str:
+        return 'calibration-model'
 
 
 if __name__ == "__main__":

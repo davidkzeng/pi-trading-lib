@@ -4,9 +4,9 @@ import logging
 import numpy as np
 import pandas as pd
 
-import pi_trading_lib.numpy_ext as np_ext
-import pi_trading_lib.data.contracts
 from pi_trading_lib.data.market_data import MarketDataSnapshot
+import pi_trading_lib.data.contracts
+import pi_trading_lib.numpy_ext as np_ext
 
 
 class PositionChange:

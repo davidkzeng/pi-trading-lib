@@ -25,6 +25,11 @@ class Model(ABC):
     def get_universe(self, date: datetime.date) -> np.ndarray:
         pass
 
+    @abstractmethod
+    @property
+    def name(self) -> str:
+        pass
+
 
 class ReturnModel:
     @abstractmethod

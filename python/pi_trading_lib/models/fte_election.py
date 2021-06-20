@@ -1,5 +1,6 @@
 import datetime
 import typing as t
+import functools
 
 import numpy as np
 import pandas as pd
@@ -37,15 +38,11 @@ class NaiveModel(Model):
     """
 
     def __init__(self):
-        all_state_contract_info = contract_groups.get_contract_data(STATE_CONTRACTS)
-        self.state_contract_info = {cid: info for cid, info in all_state_contract_info.items()
-                                    if (info[0] not in EXCLUDE_STATES) and (info[1] == 'democratic')}
-        self.state_contract_ids = sorted(self.state_contract_info.keys(), key=lambda cid: self.state_contract_info[cid][0])
-        self.universe: np.ndarray = np.sort(np.array(list(self.state_contract_ids)))
+        pass
 
     def _get_state_contract_md(self, date: datetime.date) -> pd.DataFrame:
-        state_md = market_data.get_snapshot(date, tuple(self.state_contract_ids)).data
-        state_md['state'] = state_md.index.get_level_values('contract_id').map(self.state_contract_info).map(lambda info: info[0])
+        state_md = market_data.get_snapshot(date, tuple(self._get_state_contract_ids())).data
+        state_md['state'] = state_md.index.get_level_values('contract_id').map(self._get_state_contract_info()).map(lambda info: info[0])
         return state_md.reset_index().set_index('state')
 
     def _get_state_contract_model(self, date: datetime.date) -> pd.DataFrame:
@@ -76,8 +73,27 @@ class NaiveModel(Model):
         state_model = state_model.reindex(self.get_universe(date))
         return state_model
 
+    @staticmethod
+    @functools.lru_cache()
+    def _get_state_contract_info() -> t.Dict[int, t.Any]:
+        all_state_contract_info = contract_groups.get_contract_data(STATE_CONTRACTS)
+        state_contract_info = {cid: info for cid, info in all_state_contract_info.items()
+                               if (info[0] not in EXCLUDE_STATES) and (info[1] == 'democratic')}
+        return state_contract_info
+
+    @staticmethod
+    @functools.lru_cache()
+    def _get_state_contract_ids() -> t.List[int]:
+        state_contract_ids = sorted(NaiveModel._get_state_contract_info().keys(), key=lambda cid: NaiveModel._get_state_contract_info()[cid][0])
+        return state_contract_ids
+
+    @staticmethod
+    @functools.lru_cache()
+    def _get_universe() -> np.ndarray:
+        return np.sort(np.array(list(NaiveModel._get_state_contract_ids())))
+
     def get_universe(self, date: datetime.date) -> np.ndarray:
-        return self.universe
+        return NaiveModel._get_universe()
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
         state_model = self._get_state_contract_model(date)
@@ -86,3 +102,7 @@ class NaiveModel(Model):
     def get_factor(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
         state_model = self._get_state_contract_model(date)
         return state_model['margin_factor']  # type: ignore
+
+    @property
+    def name(self) -> str:
+        return 'election-model'

@@ -42,7 +42,10 @@ class Config:
         return Config(component_params)
 
 
-def guess_param_type(val: str) -> ParamValue:
+def guess_param_type(val: str, param: str) -> ParamValue:
+    if 'date' in param:
+        return val
+
     if val in ['true', 'True']:
         return True
     elif val in ['false', 'False']:
@@ -61,7 +64,7 @@ def override_config(config: Config, override_str: str) -> Config:
     override_vals: t.Dict[str, ParamValue] = {}
     for override in overrides:
         tokens = override.split('=', 1)
-        override_vals[tokens[0]] = guess_param_type(tokens[1])
+        override_vals[tokens[0]] = guess_param_type(tokens[1], tokens[0])
     return config.override(override_vals)
 
 

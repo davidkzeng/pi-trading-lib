@@ -47,7 +47,13 @@ def get_uri(stage: str, config: model_config.Config,
     return os.path.join(get_work_dir(), stage, stage_suffix, strhash(config.params))
 
 
-def cleanup():
+def cleanup(stages='all'):
     if os.path.exists(_work_dir):
         logging.info("Cleaning up work directory %s" % _work_dir)
-        shutil.rmtree(_work_dir)
+        if stages == 'all':
+            shutil.rmtree(_work_dir)
+        else:
+            assert isinstance(stages, list)
+            for stage in stages:
+                if os.path.exists(os.path.join(_work_dir, stage)):
+                    shutil.rmtree(os.path.join(_work_dir, stage))
