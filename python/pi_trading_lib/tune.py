@@ -26,12 +26,12 @@ def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[C
 
         results.append((new_config, sim_result))
 
-    results = sorted(results, key=lambda res: res[1], reverse=True)
+    results = sorted(results, key=lambda res: res[1].score, reverse=True)
     print('RESULTS')
     for result in results:
         override_config, sim_result = result
         diff = config.diff(override_config)
-        print(f'[{sim_result.score:.2f}]      ({diff})')
+        print(f'[{sim_result.score:.2f}]      ({diff})     {sim_result.path}')
         print(sim_result.book_summary)
 
     assert best_override is not None and best_result is not None

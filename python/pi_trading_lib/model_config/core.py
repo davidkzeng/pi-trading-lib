@@ -6,4 +6,5 @@ config = {
     'std-penalty': 1.0,
     'take-edge': 0.02,
     'use-final-res': True,
+    'sim-version': 1,
 }

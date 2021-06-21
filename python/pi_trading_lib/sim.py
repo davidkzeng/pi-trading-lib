@@ -53,6 +53,8 @@ def optimize_date(cur_date: datetime.date, config: model_config.Config, sim_stat
     book.update_universe(daily_universe, md_sod)
 
     price_models = []
+    price_model_names = []
+    price_model_weights = []
     factor_models = []
     for model in models:
         price_model = model.get_price(config, cur_date)
@@ -60,19 +62,23 @@ def optimize_date(cur_date: datetime.date, config: model_config.Config, sim_stat
         if price_model is not None:
             price_model = price_model.reindex(daily_universe)
             price_models.append(price_model)
+            price_model_names.append(model.name)
+            price_model_weights.append(config[f'return-weight-{model.name}'])
         if factor_model is not None:
             factor_model = factor_model.reindex(daily_universe)
             factor_models.append(factor_model)
 
     md_sod = md_sod.reindex(daily_universe)
-    new_pos = optimizer.optimize(book, md_sod, price_models, [], factor_models, config)
+    opt_result = optimizer.optimize(book, md_sod, price_models, price_model_weights, [], factor_models, config)
+    new_pos = opt_result['new_pos']
 
     fills = book.apply_position_change(new_pos, md_sod)
     for fill in fills:
         fill.add_sim_info(cur_date)
         cid = fill.info['cid']
         for idx, price_model in enumerate(price_models):
-            fill.add_model_info({f'model_price_{idx}': price_model.loc[cid]})
+            fill.add_model_info({f'model_price_{price_model_names[idx]}': price_model.loc[cid]})
+        fill.add_opt_info({'agg_price_model': opt_result['agg_price_model'].loc[cid]})
 
     sim_state.fillstats.add_fills(fills)
     book.set_mark_price(md_sod['trade_price'])

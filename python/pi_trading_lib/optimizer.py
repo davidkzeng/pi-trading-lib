@@ -14,12 +14,14 @@ import pi_trading_lib.timers
 
 @pi_trading_lib.timers.timer
 def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.Series],
+             price_model_weights: t.List[float],
              return_models: t.List[pd.Series], factor_models: t.List[pd.Series],
-             config: model_config.Config) -> pd.Series:
+             config: model_config.Config) -> pd.DataFrame:
     assert return_models is not None  # unused
 
     num_contracts = len(snapshot.data)
 
+    assert len(price_models) == len(price_model_weights)
     for pm in price_models:
         assert len(pm) == num_contracts
     for fm in factor_models:
@@ -34,9 +36,22 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 
     price_models = price_models + [snapshot['mid_price']]
-    combined_price_models = np.array(price_models, dtype=np.float64)
-    agg_price_model = np.nanmean(combined_price_models, axis=0)
-    agg_price_model[np.isnan(agg_price_model)] = snapshot['mid_price'][np.isnan(agg_price_model)]
+    price_model_weights = price_model_weights + [1.0]
+
+    # TODO: convert this to numpy code
+    agg_prices = []
+    for cid in snapshot.universe:
+        sum_price = 0.0
+        sum_weight = 0.0
+        for idx, price_model in enumerate(price_models):
+            if not np.isnan(price_model[cid]):
+                price_model_weight = price_model_weights[idx]
+                sum_weight += price_model_weight
+                sum_price += price_model[cid] * price_model_weight
+        agg_price = sum_price / sum_weight
+        agg_prices.append(agg_price)
+
+    agg_price_model = np.array(agg_prices)
 
     # Contracts to sell or buy
     cur_position = pd.Series(book.position, index=book.universe.cids).reindex(snapshot.universe).to_numpy()
@@ -86,4 +101,8 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     pos_mult = config['position-size-mult']
     rounded_new_pos = np.around(new_pos.value / pos_mult) * pos_mult
-    return pd.Series(rounded_new_pos, index=snapshot.universe)  # type: ignore
+    opt_res = {
+        'new_pos': rounded_new_pos,
+        'agg_price_model': agg_price_model,
+    }
+    return pd.DataFrame(opt_res, index=snapshot.universe)  # type: ignore

@@ -40,6 +40,11 @@ class Fill:
             model_info
         )
 
+    def add_opt_info(self, optimizer_info: t.Dict[str, t.Any]):
+        self.info.update(
+            optimizer_info
+        )
+
 
 class Fillstats:
     def __init__(self):
@@ -50,4 +55,6 @@ class Fillstats:
 
     def to_frame(self) -> pd.DataFrame:
         fill_infos = [fill.info for fill in self.fills]
-        return pd.DataFrame(fill_infos)
+        df = pd.DataFrame(fill_infos)
+        df['cid'] = df['cid'].astype(int)
+        return df
