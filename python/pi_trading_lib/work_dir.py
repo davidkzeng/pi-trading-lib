@@ -25,6 +25,7 @@ def get_work_dir():
 
     if _work_dir is None:
         _work_dir = tempfile.mkdtemp()
+        logging.warn(f'Using temporary work dir {_work_dir}, considering calling pi_trarding_lib.work_dir.set_work_dir()')
         atexit.register(cleanup)
 
     return _work_dir
