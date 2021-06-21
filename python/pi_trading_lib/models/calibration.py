@@ -1,7 +1,6 @@
 import argparse
 import datetime
 import itertools
-import json
 import os
 import typing as t
 
@@ -52,26 +51,37 @@ def sample(begin_date: datetime.date, end_date: datetime.date, config: model_con
         date_samples = sample_date(date, config)
         all_samples.append(date_samples)
     samples = list(itertools.chain(*all_samples))
-    return samples
+    sample_df = pd.DataFrame(samples, columns=['market_id', 'trade_price', 'resolution'])
+
+    """
+    num_markets = sample_df['market_id'].nunique()
+    min_samples = 50000
+    n_samples = min(400, min_samples // num_markets)
+    # TODO: sample less than the daily number of values
+    # TODO: only sample when spread is
+    resampled = sample_df.groupby('market_id').sample(n=n_samples, replace=True)
+    """
+
+    return sample_df
 
 
 @pi_trading_lib.timers.timer
-def generate_parameters(date: datetime.date, config: model_config.Config) -> t.Dict[int, float]:
-    output = os.path.join(work_dir.get_uri('calibration_model', config.component_params('calibration-model'), date_1=date), 'model.json')
+def generate_parameters(date: datetime.date, config: model_config.Config) -> pd.Series:
+    output = os.path.join(work_dir.get_uri('calibration_model', config.component_params('calibration-model'), date_1=date), 'model.csv')
 
     if os.path.exists(output):
-        with open(output) as f:
-            d_json = json.load(f)
-            d = {int(k): float(v) for k, v in d_json.items()}
-            return d
+        ser = pd.read_csv(output, index_col='price')['model_price']
+        return ser
 
     if date < date_util.from_str(config['calibration-model-active-date']):
-        return {}
+        nan_array = np.empty(99)
+        nan_array[:] = np.nan
+        ser = pd.Series(nan_array, index=[i for i in range(1, 100)], name='model_price')
+        ser.index.name = 'price'
+        return ser
 
     begin_date = date_util.from_str(config['calibration-model-begin-date'])
-    samples = sample(begin_date, date_util.prev(date), config)
-
-    sample_df = pd.DataFrame(samples, columns=['market_id', 'trade_price', 'resolution'])
+    sample_df = sample(begin_date, date_util.prev(date), config)
 
     calibration_model = []
 
@@ -97,10 +107,11 @@ def generate_parameters(date: datetime.date, config: model_config.Config) -> t.D
             if val >= calibration_model[idx][0] and val < calibration_model[idx + 1][0]:
                 calibration_dict[i] = (calibration_model[idx][1] + calibration_model[idx + 1][1]) * 0.5
                 break
-
+    calibration_ser = pd.Series(calibration_dict, name='model_price')
+    calibration_ser.index.name = 'price'
     with fs.safe_open(output, 'w+') as f:
-        json.dump(calibration_dict, f)
-    return calibration_dict
+        calibration_ser.to_csv(f)
+    return calibration_ser
 
 
 class CalibrationModel(Model):
@@ -115,8 +126,11 @@ class CalibrationModel(Model):
         model = generate_parameters(date, config)
         md = market_data.get_snapshot(date)
         # combine with trade_price?
-        calibrated_price = md['mid_price'].map(lambda f: model.get(int(f * 100), None))
-        return calibrated_price
+        rounded_price = (md['mid_price'] * 100).round().astype(np.int64)
+        df = rounded_price.to_frame()
+        df.columns = ['rounded_price']
+        merged = df.merge(model, how='left', left_on='rounded_price', right_index=True)
+        return merged['model_price']
 
     def get_universe(self, date: datetime.date) -> np.ndarray:
         model_snapshot = self._get_contract_md(date)
@@ -141,9 +155,9 @@ if __name__ == "__main__":
 
     parameters = generate_parameters(date_util.from_str(args.end_date), default_config)
 
-    pser = pd.Series(parameters).to_frame()
-    pser.index = pser.index / 100
-    pser['price'] = pser.index
-    print(pser)
-    pser.plot()
+    df = parameters.to_frame()
+    df.index = df.index / 100
+    df['price'] = df.index
+    print(df)
+    df.plot()
     plt.show()

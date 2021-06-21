@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from pi_trading_lib.data.market_data import MarketDataSnapshot
+from pi_trading_lib.fillstats import Fill
 import pi_trading_lib.data.contracts
 import pi_trading_lib.numpy_ext as np_ext
 
@@ -15,8 +16,8 @@ class PositionChange:
 
         self.size = len(cur_pos)
 
-        self.cur_pos = cur_pos
-        self.new_pos = new_pos
+        self.cur_pos = cur_pos.copy()
+        self.new_pos = new_pos.copy()
         self.new_pos[np.isnan(self.new_pos)] = self.cur_pos[np.isnan(self.new_pos)]
         self.diff = self.new_pos - self.cur_pos
         self.b_qty = np_ext.pos(self.diff)
@@ -116,7 +117,8 @@ class Book:
         self.mark_price[~np.isnan(mark_price)] = mark_price[~np.isnan(mark_price)]
         self._recompute()
 
-    def apply_position_change(self, new_pos: pd.Series, snapshot: MarketDataSnapshot):
+    @pi_trading_lib.timers.timer
+    def apply_position_change(self, new_pos: pd.Series, snapshot: MarketDataSnapshot) -> t.List[Fill]:
         assert np.all(new_pos.index == snapshot.universe)
 
         new_pos = new_pos.reindex(self.universe.cids).to_numpy()
@@ -129,12 +131,33 @@ class Book:
 
         # We assume here that liquidity at TOB is enough to implement the position change
         change_cost = -1 * np.nan_to_num(change.sb_qty * (1 - ask_price) - change.bb_qty * ask_price + change.bs_qty * bid_price - change.ss_qty * (1 - bid_price), 0.0)
+        exe_value = np.abs(
+            np.nan_to_num(change.sb_qty * (1 - ask_price), 0.0) +
+            np.nan_to_num(-1 * change.bb_qty * ask_price, 0.0) +
+            np.nan_to_num(change.bs_qty * bid_price, 0.0) +
+            np.nan_to_num(-1 * change.ss_qty * (1 - bid_price), 0.0)
+        )
         self.capital -= np.sum(change_cost)
         self.position = change.new_pos
         self.exe_qty += change.exe_qty()
-        self.exe_value += np.abs(change_cost)
+        self.exe_value += np.abs(exe_value)
         self.net_cost += change_cost
         self._recompute()
+
+        fills: t.List[Fill] = []
+        fill_info = pd.DataFrame(
+            np.array([change.cur_pos, change.diff, bid_price, ask_price,
+                      change_cost, exe_value]).T,
+            index=self.universe.cids,
+            columns=Fill.BOOK_COLUMNS
+        )
+        fill_info.index.name = 'cids'
+        fill_info = fill_info[fill_info['qty'] != 0]
+        for _, fill in fill_info.iterrows():
+            new_fill = Fill()
+            new_fill.add_book_info(fill)
+            fills.append(new_fill)
+        return fills
 
     def apply_resolutions(self, resolutions: t.Dict[int, t.Optional[float]]):
         resolution_ser = pd.Series(resolutions, name='resolution')

@@ -23,6 +23,7 @@ def main():
     subparsers = parser.add_subparsers(dest='subparser', required=True)
 
     subparsers.add_parser('plot')
+    subparsers.add_parser('pnl')
 
     cids_parser = subparsers.add_parser('cids')
     cids_parser.add_argument('--csv', action='store_true')
@@ -31,12 +32,18 @@ def main():
     cid_parser.add_argument('cid')
     cid_parser.add_argument('--csv', action='store_true')
 
+    fill_parser = subparsers.add_parser('fill')
+    fill_parser.add_argument('--cid')
+
     args = parser.parse_args()
 
     sim_result = SimResult.load(args.path)
 
     if args.subparser == 'plot':
         sim_result.daily_summary[['capital', 'pos_value', 'value', 'net_cost', 'mark_pnl']].plot()
+        plt.show()
+    elif args.subparser == 'pnl':
+        sim_result.daily_pnl.cumsum().plot()
         plt.show()
     elif args.subparser == 'cids':
         cid_summary = sim_result.cid_summary

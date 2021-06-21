@@ -34,8 +34,8 @@ class SimState:
 
 # IMPURE
 @pi_trading_lib.timers.timer
-def optimize_date(cur_date: datetime.date, config: model_config.Config, state: SimState):
-    models, book = state.models, state.book
+def optimize_date(cur_date: datetime.date, config: model_config.Config, sim_state: SimState):
+    models, book = sim_state.models, sim_state.book
 
     model_universes = [model.get_universe(cur_date) for model in models]
     model_universe = np.concatenate(model_universes)
@@ -66,7 +66,14 @@ def optimize_date(cur_date: datetime.date, config: model_config.Config, state: S
     md_sod = md_sod.reindex(daily_universe)
     new_pos = optimizer.optimize(book, md_sod, price_models, [], factor_models, config)
 
-    book.apply_position_change(new_pos, md_sod)
+    fills = book.apply_position_change(new_pos, md_sod)
+    for fill in fills:
+        fill.add_sim_info(cur_date)
+        cid = fill.info['cid']
+        for idx, price_model in enumerate(price_models):
+            fill.add_model_info({f'model_price_{idx}': price_model.loc[cid]})
+
+    sim_state.fillstats.add_fills(fills)
     book.set_mark_price(md_sod['trade_price'])
     logging.debug(f'\n{book.get_summary()}')
 
@@ -93,6 +100,8 @@ def daily_sim(begin_date: datetime.date, end_date: datetime.date,
     cid_summaries = []
 
     for cur_date in date_util.date_range(begin_date, end_date):
+        logging.info('sim for: ' + str(cur_date))
+
         if market_data.bad_market_data(cur_date):
             continue
 
@@ -117,8 +126,9 @@ def daily_sim(begin_date: datetime.date, end_date: datetime.date,
         book.set_mark_price(res_series)
     logging.debug(f'\n{book}')
 
-    result = SimResult(book.get_summary(), book.get_contract_summary(), daily_summary, daily_cid_summary)
-    result.dump(result_uri)
+    result = SimResult(book.get_summary(), book.get_contract_summary(), daily_summary,
+                       daily_cid_summary, fillstats.to_frame(), path=result_uri)
+    result.dump()
     return result
 
 
@@ -135,6 +145,8 @@ def main(argv):
 
     if args.debug:
         logging_ext.init_logging(level=logging.DEBUG)
+    else:
+        logging_ext.init_logging()
 
     if args.force_all:
         work_dir.cleanup()

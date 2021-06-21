@@ -91,7 +91,7 @@ def report_timers():
     print('\nTIMERS')
     print_format('func_name', 'sum', 'avg', 'owned_sum', 'count')
     print()
-    for func_name, timer in _function_timers.items():
+    for func_name, timer in sorted(_function_timers.items(), key=lambda x: x[0]):
         timer_report = timer.report()
         if timer_report is not None:
             print_format(func_name, *timer_report)

@@ -5,10 +5,10 @@ from pi_trading_lib.score import SimResult
 import pi_trading_lib.model_config
 
 
-def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[Config], SimResult]):
+def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[Config], SimResult]) -> t.Tuple[Config, SimResult]:
     search: t.List[t.Dict] = [{}] + overrides
 
-    best_val = None
+    best_result = None
     best_override = None
 
     results = []
@@ -20,8 +20,8 @@ def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[C
 
         sim_result = sim_fn(new_config)
 
-        if best_val is None or best_val < sim_result.score:
-            best_val = sim_result.score
+        if best_result is None or best_result.score < sim_result.score:
+            best_result = sim_result
             best_override = new_config
 
         results.append((new_config, sim_result))
@@ -34,10 +34,12 @@ def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[C
         print(f'[{sim_result.score:.2f}]      ({diff})')
         print(sim_result.book_summary)
 
-    assert best_override is not None
+    assert best_override is not None and best_result is not None
     print()
-    print('Best score: ', best_val)
+    print('Best score: ', best_result.score)
     print('Best override: ', config.diff(best_override))
+    print('Best path: ', best_result.path)
+    return best_override, best_result
 
 
 def parse_search(search_str: str) -> t.List[t.Dict]:

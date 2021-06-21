@@ -80,7 +80,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     objective = obj_return + obj_std + obj_factor
     problem = cp.Problem(cp.Maximize(objective), constraints)
-    problem.solve()
+    problem.solve(abstol=1e-4)
 
     logging.debug((obj_return.value, obj_std.value, obj_factor.value))
 

@@ -1,0 +1,29 @@
+#!/bin/bash
+"exec" "$(dirname $0)/pyenv" "python" "$0" "$@"
+
+import argparse
+import os
+import stat
+
+TEMPLATE = '''#!/bin/bash
+"exec" "$(dirname $0)/pyenv" "python" "$0" "$@"
+
+import pi_trading_lib.scripts.{name} as {name}
+
+{name}.main()
+'''
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('name', nargs='+', default=[])
+    args = parser.parse_args()
+
+    bin_dir = os.path.dirname(os.path.realpath(__file__))
+
+    for name in args.name:
+        output_file = os.path.join(bin_dir, name)
+        if not os.path.exists(output_file):
+            content = TEMPLATE.format(name=name)
+            with open(output_file, 'w+') as f:
+                f.write(content)
+                os.chmod(output_file, stat.S_IRWXU | stat.S_IRWXG | stat.S_IROTH | stat.S_IXOTH)
