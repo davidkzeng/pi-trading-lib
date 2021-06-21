@@ -234,7 +234,7 @@ fn ingest_data(state: &mut PIDataState, data: &PIDataPacket) -> HashMap<u64, Vec
     let mut updated_markets = HashMap::new();
     for (&market_id, market_data) in data.market_updates.iter() {
         let market_updates = ingest_one_market_data(state, market_data);
-        if market_updates.is_empty() {
+        if !market_updates.is_empty() {
             updated_markets.insert(market_id, market_updates);
         }
     }
