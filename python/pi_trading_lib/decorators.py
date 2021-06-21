@@ -56,3 +56,8 @@ def memoize():
 
         return decorated_func
     return memoize_decorator
+
+
+def impure(func):
+    """No-op. Tagging important impure functions in the sim path so that we don't try to cache these"""
+    return func

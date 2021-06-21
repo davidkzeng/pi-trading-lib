@@ -62,10 +62,10 @@ impl RawMarketDataCache {
     }
 
     fn ingest_and_transform(&mut self, data: &PIDataPacket) -> usize {
-        let updated_market_constracts = ingest_data(&mut self.state, data);
+        let updated_market_contracts = ingest_data(&mut self.state, data);
         let mut nout = 0;
 
-        for (&market_id, contract_ids) in updated_market_constracts.iter() {
+        for (&market_id, contract_ids) in updated_market_contracts.iter() {
             for &contract_id in contract_ids.iter() {
                 let contract_state = self.state.get_contract(contract_id).unwrap();
                 let data_packet = DataPacket {

@@ -7,10 +7,11 @@ import pandas as pd
 import scipy.stats as st
 
 from pi_trading_lib.model import Model
-import pi_trading_lib.data.market_data as market_data
-import pi_trading_lib.model_config as model_config
-import pi_trading_lib.data.fivethirtyeight as fte
 import pi_trading_lib.data.contract_groups as contract_groups
+import pi_trading_lib.data.fivethirtyeight as fte
+import pi_trading_lib.data.market_data as market_data
+import pi_trading_lib.date_util as date_util
+import pi_trading_lib.model_config as model_config
 import pi_trading_lib.states as states
 
 
@@ -70,7 +71,6 @@ class NaiveModel(Model):
         state_md = self._get_state_contract_md(date)
         state_model = state_model.join(state_md, lsuffix='_model', rsuffix='_md', how='inner')
         state_model = state_model.reset_index().set_index('contract_id')
-        state_model = state_model.reindex(self.get_universe(date))
         return state_model
 
     @staticmethod
@@ -92,15 +92,23 @@ class NaiveModel(Model):
     def _get_universe() -> np.ndarray:
         return np.sort(np.array(list(NaiveModel._get_state_contract_ids())))
 
-    def get_universe(self, date: datetime.date) -> np.ndarray:
+    def get_universe(self, config: model_config.Config, date: datetime.date) -> np.ndarray:
+        if date > date_util.from_str(config['election-model-end-date']):
+            return np.array([])
         return NaiveModel._get_universe()
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
+        if date > date_util.from_str(config['election-model-end-date']):
+            return None
         state_model = self._get_state_contract_model(date)
+        state_model = state_model.reindex(self.get_universe(config, date))
         return state_model['winstate_chal']  # type: ignore
 
     def get_factor(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
+        if date > date_util.from_str(config['election-model-end-date']):
+            return None
         state_model = self._get_state_contract_model(date)
+        state_model = state_model.reindex(self.get_universe(config, date))
         return state_model['margin_factor']  # type: ignore
 
     @property

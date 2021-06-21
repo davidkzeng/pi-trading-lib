@@ -17,6 +17,7 @@ from pi_trading_lib.score import SimResult
 import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.data.resolution
 import pi_trading_lib.date_util as date_util
+import pi_trading_lib.decorators
 import pi_trading_lib.logging_ext as logging_ext
 import pi_trading_lib.model_config as model_config
 import pi_trading_lib.optimizer as optimizer
@@ -32,12 +33,12 @@ class SimState:
         self.fillstats = fillstats
 
 
-# IMPURE
 @pi_trading_lib.timers.timer
+@pi_trading_lib.decorators.impure
 def optimize_date(cur_date: datetime.date, config: model_config.Config, sim_state: SimState):
     models, book = sim_state.models, sim_state.book
 
-    model_universes = [model.get_universe(cur_date) for model in models]
+    model_universes = [model.get_universe(config, cur_date) for model in models]
     model_universe = np.concatenate(model_universes)
     daily_universe = np.sort(np.unique(model_universe))
 

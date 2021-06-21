@@ -119,7 +119,7 @@ def audit_resolutions():
 @pi_trading_lib.timers.timer
 def update_contract_resolutions():
     all_contracts = pi_trading_lib.data.contracts.get_contracts()
-    db_resolutions = _get_contract_resolution_db(list(all_contracts.keys()))
+    db_resolutions = _get_contract_resolution_db(list(all_contracts.keys()), None)
     missing_resolutions = [cid for cid, res in db_resolutions.items() if res is None]
     print(f'{len(missing_resolutions)} contracts missing resolution')
 

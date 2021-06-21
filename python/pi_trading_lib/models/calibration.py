@@ -132,7 +132,7 @@ class CalibrationModel(Model):
         merged = df.merge(model, how='left', left_on='rounded_price', right_index=True)
         return merged['model_price']
 
-    def get_universe(self, date: datetime.date) -> np.ndarray:
+    def get_universe(self, config: model_config.Config, date: datetime.date) -> np.ndarray:
         model_snapshot = self._get_contract_md(date)
         return model_snapshot.index.to_numpy()  # type: ignore
 

@@ -27,9 +27,9 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
 
-    # widen to reduce trading (even if we could execute as best bid/ask)
-    price_b = price_b + config['trading-cost']
-    price_s = price_s + config['trading-cost']
+    # widen prices as a proxy for requiring a larger edge to trade
+    price_b = price_b + config['take-edge']
+    price_s = price_s + config['take-edge']
 
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 

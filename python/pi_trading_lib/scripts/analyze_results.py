@@ -34,6 +34,7 @@ def main():
 
     fill_parser = subparsers.add_parser('fill')
     fill_parser.add_argument('--cid')
+    fill_parser.add_argument('--csv', action='store_true')
 
     args = parser.parse_args()
 
@@ -66,6 +67,9 @@ def main():
         combined[['bid_price', 'ask_price', 'mid_price', 'trade_price']].plot(ax=axs[0])
         combined[['position', 'val', 'mark_pnl']].plot(ax=axs[1])
         plt.show()
+    elif args.subparser == 'fill':
+        fills = sim_result.fillstats
+        print_df(fills, args.csv)
 
 
 if __name__ == "__main__":

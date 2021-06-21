@@ -22,7 +22,7 @@ class Model(ABC):
         return None
 
     @abstractmethod
-    def get_universe(self, date: datetime.date) -> np.ndarray:
+    def get_universe(self, config: model_config.Config, date: datetime.date) -> np.ndarray:
         pass
 
     @property
