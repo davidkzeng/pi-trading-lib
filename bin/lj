@@ -1,0 +1,6 @@
+#!/bin/bash
+"exec" "$(dirname $0)/pyenv" "python" "$0" "$@"
+
+import pi_trading_lib.scripts.lj as lj
+
+lj.main()

@@ -55,6 +55,9 @@ class Fillstats:
 
     def to_frame(self) -> pd.DataFrame:
         fill_infos = [fill.info for fill in self.fills]
-        df = pd.DataFrame(fill_infos)
+        if len(fill_infos) > 0:
+            df = pd.DataFrame(fill_infos)
+        else:
+            df = pd.DataFrame([], columns=Fill.BASE_COLUMNS + Fill.BOOK_COLUMNS)
         df['cid'] = df['cid'].astype(int)
         return df

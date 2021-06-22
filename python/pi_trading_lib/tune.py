@@ -5,8 +5,11 @@ from pi_trading_lib.score import SimResult
 import pi_trading_lib.model_config
 
 
-def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[Config], SimResult]) -> t.Tuple[Config, SimResult]:
-    search: t.List[t.Dict] = [{}] + overrides
+def grid_search(config: Config, search: t.List[t.Dict], override: str, sim_fn: t.Callable[[Config], SimResult]) -> t.Tuple[Config, SimResult]:
+    search: t.List[t.Dict] = [{}] + search
+
+    base_config = config
+    config = pi_trading_lib.model_config.override_config(config, override)
 
     best_result = None
     best_override = None
@@ -30,14 +33,14 @@ def grid_search(config: Config, overrides: t.List[t.Dict], sim_fn: t.Callable[[C
     print('RESULTS')
     for result in results:
         override_config, sim_result = result
-        diff = config.diff(override_config)
+        diff = base_config.diff(override_config)
         print(f'[{sim_result.score:.2f}]      ({diff})     {sim_result.path}')
         print(sim_result.book_summary)
 
     assert best_override is not None and best_result is not None
     print()
     print('Best score: ', best_result.score)
-    print('Best override: ', config.diff(best_override))
+    print('Best override: ', base_config.diff(best_override))
     print('Best path: ', best_result.path)
     return best_override, best_result
 

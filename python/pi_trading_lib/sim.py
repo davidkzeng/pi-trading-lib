@@ -144,7 +144,7 @@ def main(argv):
     parser.add_argument('config')
     parser.add_argument('--search')
     parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--override')
+    parser.add_argument('--override', default='')
     parser.add_argument('--force', nargs='*')
     parser.add_argument('--force-all', action='store_true')
 
@@ -161,19 +161,17 @@ def main(argv):
         work_dir.cleanup(stages=args.force)
 
     config = model_config.get_config(args.config)
-    if args.override:
-        config = model_config.override_config(config, args.override)
 
     def run_sim(sim_config: model_config.Config) -> SimResult:
         return daily_sim(date_util.from_str(config['sim-begin-date']),
                          date_util.from_str(config['sim-end-date']), sim_config)
 
     if args.search:
-        overrides = tune.parse_search(args.search)
+        search = tune.parse_search(args.search)
     else:
-        overrides = []
+        search = []
 
-    tune.grid_search(config, overrides, run_sim)
+    tune.grid_search(config, search, args.override, run_sim)
 
     pi_trading_lib.timers.report_timers()
 

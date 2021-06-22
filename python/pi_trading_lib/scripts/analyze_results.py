@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 from pi_trading_lib.score import SimResult
 import pi_trading_lib.data.market_data as market_data
+import pi_trading_lib.df_annotators as df_annotators
 
 
 def print_df(df, csv=False):
@@ -44,6 +45,7 @@ def main():
         sim_result.daily_summary[['capital', 'pos_value', 'value', 'net_cost', 'mark_pnl']].plot()
         plt.show()
     elif args.subparser == 'pnl':
+        print(sim_result.sharpe)
         sim_result.daily_pnl.cumsum().plot()
         plt.show()
     elif args.subparser == 'cids':
@@ -69,6 +71,7 @@ def main():
         plt.show()
     elif args.subparser == 'fill':
         fills = sim_result.fillstats
+        fills = df_annotators.add_resolution(fills)
         print_df(fills, args.csv)
 
 
