@@ -163,8 +163,8 @@ def main(argv):
     config = model_config.get_config(args.config)
 
     def run_sim(sim_config: model_config.Config) -> SimResult:
-        return daily_sim(date_util.from_str(config['sim-begin-date']),
-                         date_util.from_str(config['sim-end-date']), sim_config)
+        return daily_sim(date_util.from_str(sim_config['sim-begin-date']),
+                         date_util.from_str(sim_config['sim-end-date']), sim_config)
 
     if args.search:
         search = tune.parse_search(args.search)

@@ -5,20 +5,20 @@ from pi_trading_lib.score import SimResult
 import pi_trading_lib.model_config
 
 
-def grid_search(config: Config, search: t.List[t.Dict], override: str, sim_fn: t.Callable[[Config], SimResult]) -> t.Tuple[Config, SimResult]:
-    search: t.List[t.Dict] = [{}] + search
+def grid_search(config: Config, _search: t.List[t.Dict], override_str: str, sim_fn: t.Callable[[Config], SimResult]) -> t.Tuple[Config, SimResult]:
+    search: t.List[t.Dict] = [{}] + _search
 
     base_config = config
-    config = pi_trading_lib.model_config.override_config(config, override)
+    config = pi_trading_lib.model_config.override_config(config, override_str)
 
     best_result = None
     best_override = None
 
     results = []
 
-    for override in search:
-        new_config = config.override(override)
-        if new_config == config and override != {}:
+    for search_override in search:
+        new_config = config.override(search_override)
+        if new_config == config and search_override != {}:
             continue
 
         sim_result = sim_fn(new_config)

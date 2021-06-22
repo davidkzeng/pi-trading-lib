@@ -125,11 +125,19 @@ class CalibrationModel(Model):
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
         model = generate_parameters(date, config)
         md = market_data.get_snapshot(date)
+
+        contracts = md.data.index.get_level_values('contract_id').unique().tolist()
+        binary_contract_map = pi_trading_lib.data.contracts.is_binary_contract(contracts)
+        md.data['is_binary'] = md.data.index.get_level_values('contract_id').map(binary_contract_map)
+
         # combine with trade_price?
         rounded_price = (md['mid_price'] * 100).round().astype(np.int64)
         df = rounded_price.to_frame()
         df.columns = ['rounded_price']
+        df['is_binary'] = md.data['is_binary']
+
         merged = df.merge(model, how='left', left_on='rounded_price', right_index=True)
+        merged.loc[merged['is_binary'] == False, 'model_price'] = np.nan  # noqa
         return merged['model_price']
 
     def get_universe(self, config: model_config.Config, date: datetime.date) -> np.ndarray:
