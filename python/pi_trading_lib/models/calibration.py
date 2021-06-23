@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-# from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
+from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
 from pi_trading_lib.model import Model
 import pi_trading_lib.data.contracts
 import pi_trading_lib.data.market_data as market_data
@@ -24,13 +24,20 @@ import pi_trading_lib.work_dir as work_dir
 
 @pi_trading_lib.decorators.memoize()
 @pi_trading_lib.timers.timer
-def sample_date(date: datetime.date, config: model_config.Config):
+def sample_date(date: datetime.date, binary: bool, config: model_config.Config):
     snapshot = market_data.get_snapshot(date).data
     contracts = snapshot.index.tolist()
 
     binary_contract_map = pi_trading_lib.data.contracts.is_binary_contract(contracts)
     binary_contracts = [cid for cid, val in binary_contract_map.items() if val]
-    snapshot = snapshot[snapshot.index.get_level_values(0).isin(binary_contracts)]
+
+    if binary:
+        snapshot = snapshot[snapshot.index.get_level_values(0).isin(binary_contracts)]
+    else:
+        snapshot = snapshot[~snapshot.index.get_level_values(0).isin(binary_contracts)]
+
+    snapshot = snapshot[~snapshot.index.get_level_values(0).isin(NO_CORRECT_CONTRACT_MARKETS)]
+
     contracts = snapshot.index.tolist()
 
     resolutions = resolution.get_contract_resolution(contracts)
@@ -46,49 +53,47 @@ def sample_date(date: datetime.date, config: model_config.Config):
 
 
 @pi_trading_lib.timers.timer
-def sample(begin_date: datetime.date, end_date: datetime.date, config: model_config.Config):
+def sample(begin_date: datetime.date, end_date: datetime.date, binary: bool, config: model_config.Config):
     all_samples = []
     for date in date_util.date_range(begin_date, end_date, skip_dates=market_data.missing_market_data_days()):
-        date_samples = sample_date(date, config)
+        date_samples = sample_date(date, binary, config)
         all_samples.append(date_samples)
     samples = list(itertools.chain(*all_samples))
     sample_df = pd.DataFrame(samples, columns=['market_id', 'trade_price', 'resolution'])
-
-    """
-    num_markets = sample_df['market_id'].nunique()
-    min_samples = 50000
-    n_samples = min(400, min_samples // num_markets)
-    # TODO: sample less than the daily number of values
-    # TODO: only sample when spread is
-    resampled = sample_df.groupby('market_id').sample(n=n_samples, replace=True)
-    """
 
     return sample_df
 
 
 @pi_trading_lib.timers.timer
-def generate_parameters(date: datetime.date, config: model_config.Config) -> pd.Series:
-    output = os.path.join(work_dir.get_uri('calibration_model', config.component_params('calibration-model'), date_1=date), 'model.csv')
-
-    if os.path.exists(output):
-        ser = pd.read_csv(output, index_col='price')['model_price']
-        return ser
-
+def fit_model(date: datetime.date, binary: bool, config: model_config.Config) -> pd.Series:
+    series_name = 'bin_model_price' if binary else 'non_bin_model_price'
     if date < date_util.from_str(config['calibration-model-active-date']):
         nan_array = np.empty(99)
         nan_array[:] = np.nan
-        ser = pd.Series(nan_array, index=[i for i in range(1, 100)], name='model_price')
-        ser.index.name = 'price'
+        ser = pd.Series(nan_array, name=series_name, index=[i for i in range(1, 100)])
+        ser.index.name = 'price_cents'
         return ser
 
     begin_date = date_util.from_str(config['calibration-model-begin-date'])
-    sample_df = sample(begin_date, date_util.prev(date), config)
+
+    sample_df = sample(begin_date, date_util.prev(date), binary, config)
 
     calibration_model = []
 
     window_width = config['calibration-model-fit-window-size']
     # samples at edge of window have e^{-alpha}. e^{-1} ~= 0.368
     weight_alpha = config['calibration-model-fit-sample-weight-alpha'] * 1 / window_width
+
+    if config['calibration-model-fit-market-normalize']:
+        market_counts = sample_df.groupby('market_id').size()
+        market_weights = 1 / market_counts
+        market_weights_df = market_weights.to_frame(name='market_weight')
+    else:
+        market_ids = sample_df['market_id'].unique()
+        market_weights_df = pd.DataFrame([], index=market_ids)
+        market_weights_df['market_weight'] = 1.0
+
+    sample_df = sample_df.merge(market_weights_df, left_on='market_id', right_index=True, how="left")
 
     lin_reg = LinearRegression()
     for i in range(1, 100):
@@ -99,7 +104,8 @@ def generate_parameters(date: datetime.date, config: model_config.Config) -> pd.
         df_filter = (sample_df['trade_price'] >= window_lower) & (sample_df['trade_price'] <= window_upper)
 
         # we reuse the same df, but that's ok
-        sample_df['weight'] = np.round(np.exp(-1.0 * weight_alpha * (sample_df['trade_price'] - px).abs()), decimals=3)
+        sample_df['dist_weight'] = np.round(np.exp(-1.0 * weight_alpha * (sample_df['trade_price'] - px).abs()), decimals=3)
+        sample_df['weight'] = sample_df['dist_weight'] * sample_df['market_weight']
         sample_df_window = sample_df[df_filter]
         lin_model = lin_reg.fit(np.reshape(sample_df_window['trade_price'].to_numpy(), (-1, 1)),
                                 sample_df_window['resolution'].to_numpy(),
@@ -108,11 +114,27 @@ def generate_parameters(date: datetime.date, config: model_config.Config) -> pd.
         lin_model_estimate = max(0.0, min(1.0, lin_model_estimate))
         calibration_model.append(lin_model_estimate)
 
-    calibration_ser = pd.Series(calibration_model, name='model_price', index=[i for i in range(1, 100)])
-    calibration_ser.index.name = 'price'
-    with fs.safe_open(output, 'w+') as f:
-        calibration_ser.to_csv(f)
+    calibration_ser = pd.Series(calibration_model, name=series_name, index=[i for i in range(1, 100)])
+    calibration_ser.index.name = 'price_cents'
     return calibration_ser
+
+
+@pi_trading_lib.timers.timer
+def generate_parameters(date: datetime.date, config: model_config.Config) -> pd.DataFrame:
+    output = os.path.join(work_dir.get_uri('calibration_model', config.component_params('calibration-model'), date_1=date), 'model.csv')
+
+    if os.path.exists(output):
+        df = pd.read_csv(output, index_col='price_cents')
+        return df
+
+    binary_ser = fit_model(date, True, config)
+    nonbinary_ser = fit_model(date, False, config)
+
+    calibration_df = pd.concat([binary_ser, nonbinary_ser], axis=1)
+
+    with fs.safe_open(output, 'w+') as f:
+        calibration_df.to_csv(f)
+    return calibration_df
 
 
 class CalibrationModel(Model):
@@ -129,16 +151,20 @@ class CalibrationModel(Model):
 
         contracts = md.data.index.get_level_values('contract_id').unique().tolist()
         binary_contract_map = pi_trading_lib.data.contracts.is_binary_contract(contracts)
-        md.data['is_binary'] = md.data.index.get_level_values('contract_id').map(binary_contract_map)
 
         # combine with trade_price?
-        rounded_price = (md['mid_price'] * 100).round().astype(np.int64)
-        df = rounded_price.to_frame()
-        df.columns = ['rounded_price']
-        df['is_binary'] = md.data['is_binary']
+        df = pd.DataFrame([], index=md.data.index)
+        df['rounded_price'] = (md['mid_price'] * 100).round().astype(np.int64)
+        df['is_binary'] = md.data.index.get_level_values('contract_id').map(binary_contract_map)
 
         merged = df.merge(model, how='left', left_on='rounded_price', right_index=True)
-        merged.loc[merged['is_binary'] == False, 'model_price'] = np.nan  # noqa
+        merged['model_price'] = np.nan
+
+        if config['calibration-model-enable-binary']:
+            merged.loc[merged['is_binary'] == False, 'model_price'] = merged.loc[merged['is_binary'] == False, 'bin_model_price']  # noqa
+        if config['calibration-model-enable-non-binary']:
+            merged.loc[merged['is_binary'] == True, 'model_price'] = merged.loc[merged['is_binary'] == True, 'non_bin_model_price']  # noqa
+
         return merged['model_price']
 
     def get_universe(self, config: model_config.Config, date: datetime.date) -> np.ndarray:
@@ -155,18 +181,22 @@ if __name__ == "__main__":
 
     parser.add_argument('--begin-date')
     parser.add_argument('--end-date', required=True)
+    parser.add_argument('--override', default='')
 
     args = parser.parse_args()
 
-    default_config = model_config.get_config('calibration_model')
+    config = model_config.get_config('calibration_model')
     if args.begin_date:
-        default_config = default_config.override({'calibration-model-begin-date': args.begin_date})
+        config = config.override({'calibration-model-begin-date': args.begin_date})
+    config = pi_trading_lib.model_config.override_config(config, args.override)
 
-    parameters = generate_parameters(date_util.from_str(args.end_date), default_config)
+    model_df = generate_parameters(date_util.from_str(args.end_date), config)
+    model_df['price'] = model_df.index.get_level_values(0) / 100
+    model_df = model_df.reset_index(drop=True)
+    model_df = model_df.set_index('price', drop=False)
 
-    df = parameters.to_frame()
-    df.index = df.index / 100
-    df['price'] = df.index
-    print(df)
-    df.plot()
+    print(model_df)
+    pi_trading_lib.timers.report_timers()
+
+    model_df.plot()
     plt.show()

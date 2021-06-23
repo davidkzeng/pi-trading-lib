@@ -141,7 +141,7 @@ def daily_sim(begin_date: datetime.date, end_date: datetime.date,
 
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('config')
+    parser.add_argument('config', default='current')
     parser.add_argument('--search')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--override', default='')

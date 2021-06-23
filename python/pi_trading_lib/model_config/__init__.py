@@ -63,6 +63,8 @@ def override_config(config: Config, override_str: str) -> Config:
     overrides = override_str.split(':')
     override_vals: t.Dict[str, ParamValue] = {}
     for override in overrides:
+        if len(override) == 0:
+            continue
         tokens = override.split('=', 1)
         override_vals[tokens[0]] = guess_param_type(tokens[1], tokens[0])
     return config.override(override_vals)
