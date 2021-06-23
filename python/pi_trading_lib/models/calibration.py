@@ -7,6 +7,7 @@ import typing as t
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LinearRegression
 
 # from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
 from pi_trading_lib.model import Model
@@ -85,29 +86,29 @@ def generate_parameters(date: datetime.date, config: model_config.Config) -> pd.
 
     calibration_model = []
 
-    for i in range(1, 100, 1):
-        px = i * 0.01
-        alpha = 25.0
-        sample_df['weight'] = np.round(np.exp(-1.0 * alpha * (sample_df['trade_price'] - px).abs()), decimals=3)
-        sample_df['weighted_res'] = sample_df['weight'] * sample_df['resolution']
-        sample_df['weighted_trade'] = sample_df['weight'] * sample_df['trade_price']
-        result = sample_df['weighted_res'].sum() / sample_df['weight'].sum()
-        result_trade = sample_df['weighted_trade'].sum() / sample_df['weight'].sum()
-        calibration_model.append((result_trade, result))
+    window_width = config['calibration-model-fit-window-size']
+    # samples at edge of window have e^{-alpha}. e^{-1} ~= 0.368
+    weight_alpha = config['calibration-model-fit-sample-weight-alpha'] * 1 / window_width
 
-    # hacky calibration script, we should adopt a smarter fitting method
-    calibration_dict = {}
-    for i in range(1, 100, 1):
-        val = i * 0.01
-        if val < calibration_model[0][0]:
-            calibration_dict[i] = calibration_model[0][1]
-        if val > calibration_model[-1][0]:
-            calibration_dict[i] = calibration_model[-1][1]
-        for idx in range(0, len(calibration_model) - 1):
-            if val >= calibration_model[idx][0] and val < calibration_model[idx + 1][0]:
-                calibration_dict[i] = (calibration_model[idx][1] + calibration_model[idx + 1][1]) * 0.5
-                break
-    calibration_ser = pd.Series(calibration_dict, name='model_price')
+    lin_reg = LinearRegression()
+    for i in range(1, 100):
+        px = i * 0.01
+        window_lower = px - window_width
+        window_upper = px + window_width
+
+        df_filter = (sample_df['trade_price'] >= window_lower) & (sample_df['trade_price'] <= window_upper)
+
+        # we reuse the same df, but that's ok
+        sample_df['weight'] = np.round(np.exp(-1.0 * weight_alpha * (sample_df['trade_price'] - px).abs()), decimals=3)
+        sample_df_window = sample_df[df_filter]
+        lin_model = lin_reg.fit(np.reshape(sample_df_window['trade_price'].to_numpy(), (-1, 1)),
+                                sample_df_window['resolution'].to_numpy(),
+                                sample_df_window['weight'].to_numpy())
+        lin_model_estimate = lin_model.coef_[0] * px + lin_model.intercept_
+        lin_model_estimate = max(0.0, min(1.0, lin_model_estimate))
+        calibration_model.append(lin_model_estimate)
+
+    calibration_ser = pd.Series(calibration_model, name='model_price', index=[i for i in range(1, 100)])
     calibration_ser.index.name = 'price'
     with fs.safe_open(output, 'w+') as f:
         calibration_ser.to_csv(f)
