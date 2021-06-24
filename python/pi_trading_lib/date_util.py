@@ -4,11 +4,15 @@ import datetime
 STANDARD_DATE_FORMAT = '%Y%m%d'
 
 
-def from_str(date_str: str) -> datetime.date:
+def from_str(date_str: t.Union[datetime.date, str]) -> datetime.date:
+    if isinstance(date_str, datetime.date):
+        return date_str
     return datetime.datetime.strptime(date_str, STANDARD_DATE_FORMAT).date()
 
 
-def to_str(date: datetime.date) -> str:
+def to_str(date: t.Union[datetime.date, str]) -> str:
+    if isinstance(date, str):
+        return date
     return date.strftime(STANDARD_DATE_FORMAT)
 
 

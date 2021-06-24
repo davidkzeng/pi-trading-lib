@@ -121,6 +121,9 @@ class Book:
     def apply_position_change(self, new_pos: pd.Series, snapshot: MarketDataSnapshot) -> t.List[Fill]:
         assert np.all(new_pos.index == snapshot.universe)
 
+        if len(new_pos) == 0:
+            return []
+
         new_pos = new_pos.reindex(self.universe.cids).to_numpy()
         change = PositionChange(self.position, new_pos)
 

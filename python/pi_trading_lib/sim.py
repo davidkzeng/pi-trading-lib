@@ -79,6 +79,7 @@ def optimize_date(cur_date: datetime.date, config: model_config.Config, sim_stat
         for idx, price_model in enumerate(price_models):
             fill.add_model_info({f'model_price_{price_model_names[idx]}': price_model.loc[cid]})
         fill.add_opt_info({'agg_price_model': opt_result['agg_price_model'].loc[cid]})
+        fill.add_computed_info()
 
     sim_state.fillstats.add_fills(fills)
     book.set_mark_price(md_sod['trade_price'])
@@ -141,7 +142,7 @@ def daily_sim(begin_date: datetime.date, end_date: datetime.date,
 
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('config', default='current')
+    parser.add_argument('--config', default='current')
     parser.add_argument('--search')
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--override', default='')

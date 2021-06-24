@@ -45,6 +45,12 @@ class Fill:
             optimizer_info
         )
 
+    def add_computed_info(self):
+        return_edge = self.info['agg_price_model'] - self.info['ask_price'] if self.info['qty'] > 0 else self.info['bid_price'] - self.info['agg_price_model']
+        self.info.update(
+            {'return_edge': return_edge}
+        )
+
 
 class Fillstats:
     def __init__(self):

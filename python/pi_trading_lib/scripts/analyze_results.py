@@ -2,6 +2,7 @@ import argparse
 import sys
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from pi_trading_lib.score import SimResult
 import pi_trading_lib.data.market_data as market_data
@@ -25,6 +26,9 @@ def main():
 
     subparsers.add_parser('plot')
     subparsers.add_parser('pnl')
+
+    marginal_parser = subparsers.add_parser('marginal')
+    marginal_parser.add_argument('--alt', nargs='+')
 
     cids_parser = subparsers.add_parser('cids')
     cids_parser.add_argument('--csv', action='store_true')
@@ -73,6 +77,11 @@ def main():
         fills = sim_result.fillstats
         fills = df_annotators.add_resolution(fills)
         print_df(fills, args.csv)
+    elif args.subparser == 'marginal':
+        alt_sim = [SimResult.load(path) for path in args.alt]
+        df = pd.DataFrame([], index=alt_sim.daily_pnl.index)
+        df['marginal'] = alt_sim.daily_summary['mark_pnl'] - sim_result.daily_summary['mark_pnl']
+        df.plot()
 
 
 if __name__ == "__main__":

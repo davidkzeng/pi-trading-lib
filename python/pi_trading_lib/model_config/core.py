@@ -1,10 +1,12 @@
 # Core configs shared across models
 
 config = {
+    'sim-version': 1, # use for forcing sim after code updates
+
     'capital': 10000.0,
-    'position-size-mult': 5,
-    'std-penalty': 1.0,
-    'take-edge': 0.02,
-    'use-final-res': True,
-    'sim-version': 1,
+    'use-final-res': False,
+
+    'optimizer-position-size-mult': 5,
+    'optimizer-std-penalty': 0.5,
+    'optimizer-take-edge': 0.04,
 }

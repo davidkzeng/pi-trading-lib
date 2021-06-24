@@ -53,7 +53,7 @@ class SimResult:
         return len(self.daily_summary)
 
     @property
-    def daily_pnl(self):
+    def daily_pnl(self) -> pd.Series:
         return (self.daily_summary['value'] - self.daily_summary['value'].shift()).dropna()
 
     @property

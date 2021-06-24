@@ -27,11 +27,14 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     for fm in factor_models:
         assert len(fm) == num_contracts
 
+    if num_contracts == 0:
+        return pd.DataFrame([], columns=['new_pos', 'agg_price_model', 'take_edge'])
+
     price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
 
     # widen prices as a proxy for requiring a larger edge to trade
-    price_b = price_b + config['take-edge']
-    price_s = price_s + config['take-edge']
+    price_b = price_b + config['optimizer-take-edge']
+    price_s = price_s + config['optimizer-take-edge']
 
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 
@@ -82,7 +85,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     ]
 
     p_win = agg_price_model
-    contract_return_stdev = np.sqrt(p_win * (1 - p_win) ** 2 + (1 - p_win) * (0 - p_win) ** 2)
+    contract_return_stdev = np.sqrt(p_win * (1 - p_win))
     contract_position_stdev = (
         cp.multiply(new_pos_b, contract_return_stdev) + cp.multiply(new_pos_s, contract_return_stdev)
     )
@@ -91,18 +94,20 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     # add constant for when margin_factors is empty to ensure obj_factor has type Expr
     obj_factor = -1 * cp.sum(margin_factors) + cp.expressions.constants.Constant(0)
     obj_return = agg_price_model @ new_pos_b + (1 - agg_price_model) @ new_pos_s + new_cap
-    obj_std = -1 * config['std-penalty'] * stdev_return
+    obj_std = -1 * config['optimizer-std-penalty'] * stdev_return
 
     objective = obj_return + obj_std + obj_factor
     problem = cp.Problem(cp.Maximize(objective), constraints)
-    problem.solve(abstol=1e-4)
+    problem.solve()
 
     logging.debug((obj_return.value, obj_std.value, obj_factor.value))
 
-    pos_mult = config['position-size-mult']
+    pos_mult = config['optimizer-position-size-mult']
     rounded_new_pos = np.around(new_pos.value / pos_mult) * pos_mult
     opt_res = {
         'new_pos': rounded_new_pos,
         'agg_price_model': agg_price_model,
     }
-    return pd.DataFrame(opt_res, index=snapshot.universe)  # type: ignore
+    df = pd.DataFrame(opt_res, index=snapshot.universe)
+    df['take_edge'] = config['optimizer-take-edge']
+    return df

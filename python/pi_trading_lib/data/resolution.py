@@ -11,6 +11,11 @@ from pi_trading_lib.data.resolution_data import CONTRACT_RESOLUTIONS, UNRESOLVED
 
 @pi_trading_lib.timers.timer
 def get_contract_resolution(ids: t.List[int], date: t.Optional[datetime.date] = None) -> t.Dict[int, t.Optional[float]]:
+    """Gets resolution (1.0, 0.0, or None) for contract
+
+    params:
+        date: ignores resolutions after given date and returns None for cid
+    """
     resolution = _get_contract_resolution_db(ids, date)
     return resolution
 

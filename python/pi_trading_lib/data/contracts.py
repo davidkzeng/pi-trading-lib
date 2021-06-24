@@ -86,6 +86,7 @@ def get_market_contracts(market_ids: t.List[int]) -> t.Dict[int, t.List[int]]:
 
 @pi_trading_lib.decorators.memoize_mapping()
 def is_binary_contract(ids: t.List[int]) -> t.Dict[int, bool]:
+    # TODO: Classify markets dominated by two contracts as binary
     contracts = get_contracts(ids)
     unique_market_ids = list(set(contract['market_id'] for contract in contracts.values()))
     market_contracts = get_market_contracts(unique_market_ids)
