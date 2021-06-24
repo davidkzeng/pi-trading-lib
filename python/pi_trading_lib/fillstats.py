@@ -8,6 +8,7 @@ import pi_trading_lib.date_util as date_util
 
 class Fill:
     BASE_COLUMNS = [
+        'fill_id',
         'cid',
         'date',
     ]
@@ -31,8 +32,8 @@ class Fill:
         )
         self.info.update({'cid': book_info.name})
 
-    def add_sim_info(self, date: datetime.date):
-        self.info.update({'date': date_util.to_str(date)})
+    def add_sim_info(self, date: datetime.date, fill_id: int):
+        self.info.update({'date': date_util.to_str(date), 'fill_id': fill_id})
 
     def add_model_info(self, model_info: t.Dict[str, t.Any]):
         # TODO: do some safety check in columns
@@ -55,6 +56,7 @@ class Fill:
 class Fillstats:
     def __init__(self):
         self.fills: t.List[Fill] = []
+        self.counter = 0
 
     def add_fills(self, fills: t.List[Fill]):
         self.fills.extend(fills)
@@ -66,4 +68,9 @@ class Fillstats:
         else:
             df = pd.DataFrame([], columns=Fill.BASE_COLUMNS + Fill.BOOK_COLUMNS)
         df['cid'] = df['cid'].astype(int)
+        df = df.set_index('fill_id')
         return df
+
+    def new_id(self):
+        self.counter += 1
+        return self.counter

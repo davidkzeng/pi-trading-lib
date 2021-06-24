@@ -4,6 +4,7 @@ import typing as t
 import numpy as np
 import pandas as pd
 import cvxpy as cp
+import cvxpy.settings
 
 import pi_trading_lib.model_config as model_config
 from pi_trading_lib.data.market_data import MarketDataSnapshot
@@ -17,6 +18,11 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
              price_model_weights: t.List[float],
              return_models: t.List[pd.Series], factor_models: t.List[pd.Series],
              config: model_config.Config) -> pd.DataFrame:
+    """Returns optimal book given market prices and models
+
+    snapshot: Used for market prices as well as universe to optimize over
+    """
+
     assert return_models is not None  # unused
 
     num_contracts = len(snapshot.data)
@@ -33,9 +39,14 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     price_b, price_s = snapshot['ask_price'].to_numpy(), (1 - snapshot['bid_price']).to_numpy()
 
     # widen prices as a proxy for requiring a larger edge to trade
+    # note that because both prices are for "buying" a long/short contract, we widen by incrementing
     price_b = price_b + config['optimizer-take-edge']
     price_s = price_s + config['optimizer-take-edge']
 
+    # e.x price_b = 0.5, price_s = 0.55
+    # price_bs = 0.45, price_sb = 0.5
+    # bid ask on going long contracts (0.45, 0.5)
+    # bid ask on going short contracts (0.5, 0.55)
     price_bb, price_bs, price_sb, price_ss = price_b, 1 - price_s, 1 - price_b, price_s
 
     price_models = price_models + [snapshot['mid_price']]
@@ -68,6 +79,9 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     delta_cap = price_sb @ delta_sb + price_bs @ delta_bs - price_bb @ delta_bb - price_ss @ delta_ss
     new_cap = book.capital + delta_cap
 
+    net_cost = pd.Series(book.pos_cost, index=book.universe.cids).reindex(snapshot.universe).to_numpy()
+    net_cost = np.minimum(net_cost, np.full(net_cost.shape, PIPOSITION_LIMIT_VALUE))
+
     margin_factors = []
     for factor_model in factor_models:
         factor_model = np.nan_to_num(factor_model)
@@ -75,13 +89,15 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     constraints = [
         new_pos_b >= 0, new_pos_s >= 0,
-        delta_bb >= 0, delta_bs >= 0, delta_ss >= 1, delta_sb >= 0,
+        delta_bb >= 0, delta_bs >= 0, delta_ss >= 0, delta_sb >= 0,
         new_pos_b == cur_position_b + delta_bb - delta_bs,
         new_pos_s == cur_position_s + delta_ss - delta_sb,
         new_pos == new_pos_b - new_pos_s,
         new_cap >= 250,
-        cp.multiply(price_b, new_pos) <= PIPOSITION_LIMIT_VALUE, # TODO: this should be base on the value of our current pos + FIFO
-        cp.multiply(-1 * price_s, new_pos) <= PIPOSITION_LIMIT_VALUE,
+        # This constraint eliminates the possibility of going wildly from
+        # max long to max short, which should be ok
+        net_cost + cp.multiply(price_b, delta_bb) <= PIPOSITION_LIMIT_VALUE,
+        net_cost + cp.multiply(price_s, delta_ss) <= PIPOSITION_LIMIT_VALUE,
     ]
 
     p_win = agg_price_model
@@ -98,9 +114,14 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     objective = obj_return + obj_std + obj_factor
     problem = cp.Problem(cp.Maximize(objective), constraints)
-    problem.solve()
+    problem.solve(abstol=1e-4)
 
-    logging.debug((obj_return.value, obj_std.value, obj_factor.value))
+    if problem.status not in cvxpy.settings.SOLUTION_PRESENT:
+        print(problem.status)
+        print(delta_bb.value, delta_bs.value, delta_sb.value, delta_ss.value)
+        assert False
+
+    logging.info((obj_return.value, obj_std.value, obj_factor.value))
 
     pos_mult = config['optimizer-position-size-mult']
     rounded_new_pos = np.around(new_pos.value / pos_mult) * pos_mult

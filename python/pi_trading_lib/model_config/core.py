@@ -7,6 +7,6 @@ config = {
     'use-final-res': False,
 
     'optimizer-position-size-mult': 5,
-    'optimizer-std-penalty': 0.5,
-    'optimizer-take-edge': 0.04,
+    'optimizer-std-penalty': 0.75,
+    'optimizer-take-edge': 0.02,
 }

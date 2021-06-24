@@ -29,7 +29,7 @@ class SimResult:
             pd.read_csv(os.path.join(path, 'cid_summary.csv'), index_col=0),
             daily_summary,
             daily_sim_summary,
-            pd.read_csv(os.path.join(path, 'fillstats.csv'), index_col=0),
+            pd.read_csv(os.path.join(path, 'fillstats.csv'), index_col=['fill_id']),
             path=path,
         )
         return result

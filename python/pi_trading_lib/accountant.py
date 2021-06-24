@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from pi_trading_lib.data.market_data import MarketDataSnapshot
+from pi_trading_lib.fifo import Fifo
 from pi_trading_lib.fillstats import Fill
 import pi_trading_lib.data.contracts
 import pi_trading_lib.numpy_ext as np_ext
@@ -63,7 +64,7 @@ class Universe:
         return self.cids.tolist()  # type: ignore
 
     def update_cids(self, cids: np.ndarray):
-        new_cids = np.array(list(set(cids) - set(self.cids)))
+        new_cids = np.array(list(set(cids) - set(self.cids)), dtype=int)
         if len(new_cids) > 0:
             new_cids = np.sort(new_cids)
             self.cids = np.concatenate((self.cids, new_cids))
@@ -86,30 +87,45 @@ class Universe:
 
 class Book:
     universe: Universe
+    initial_capital: float
     capital: float
     value: float
     position: np.ndarray
     mark_price: np.ndarray
     exe_qty: np.ndarray
     exe_value: np.ndarray
+    net_cost: np.ndarray
+    pos_cost: np.ndarray
+    mark_pnl: np.ndarray
+    unrealized_pnl: np.ndarray
+    fifo: Fifo
 
     def __init__(self, cids: np.ndarray, capital: float):
         self.universe = Universe(cids)
+        self.initial_capital = capital
         self.capital = capital
+
+        self.fifo = Fifo()
 
         self.position = np.zeros(self.universe.size, dtype=int)
         self.exe_qty = np.zeros(self.universe.size)
         self.exe_value = np.zeros(self.universe.size)
         self.mark_price = np.zeros(self.universe.size)
         self.net_cost = np.zeros(self.universe.size)
+        self.pos_cost = np.zeros(self.universe.size)
         self.mark_pnl = np.zeros(self.universe.size)
+        self.unrealized_pnl = np.zeros(self.universe.size)
 
         self._recompute()
 
     def _recompute(self):
-        self.net_cost = np.around(self.net_cost, decimals=2)
         self.mark_value = self.mark_price * np_ext.pos(self.position) + (1 - self.mark_price) * -np_ext.neg(self.position)
         self.value = np.sum(self.mark_value) + self.capital
+
+        self.pos_cost = self.fifo.pos_cost().reindex(self.universe.cids).fillna(0.0).to_numpy()
+        self.pos_cost = np.around(self.pos_cost, decimals=2)
+        self.unrealized_pnl = self.mark_value - self.pos_cost
+
         self.mark_pnl = self.mark_value - self.net_cost
 
     def set_mark_price(self, mark_price: pd.Series):
@@ -145,6 +161,15 @@ class Book:
         self.exe_qty += change.exe_qty()
         self.exe_value += np.abs(exe_value)
         self.net_cost += change_cost
+
+        fifo_df = pd.DataFrame([], index=self.universe.cids)
+        fifo_df['qty'] = change.diff
+        fifo_df['price'] = np.nan
+        fifo_df['price'] = fifo_df['price'].mask(fifo_df['qty'] > 0, ask_price)
+        fifo_df['price'] = fifo_df['price'].mask(fifo_df['qty'] < 0, (1 - bid_price))
+        fifo_df = fifo_df.dropna()
+        self.fifo.process_pos_change(fifo_df)
+
         self._recompute()
 
         fills: t.List[Fill] = []
@@ -162,7 +187,7 @@ class Book:
             fills.append(new_fill)
         return fills
 
-    def apply_resolutions(self, resolutions: t.Dict[int, t.Optional[float]]):
+    def apply_resolutions(self, resolutions: t.Dict[int, float]):
         resolution_ser = pd.Series(resolutions, name='resolution')
         resolution_ser = resolution_ser.reindex(self.universe.cids).to_numpy()
 
@@ -173,10 +198,12 @@ class Book:
         self.capital += np.sum(resolution_value)
         self.position[~np.isnan(resolution_ser)] = 0
         self.net_cost -= resolution_value
+        self.fifo.resolve(resolutions)
         self._recompute()
 
     @pi_trading_lib.timers.timer
     def update_universe(self, new_cids: np.ndarray, snapshot: MarketDataSnapshot):
+        """Expand book with new_cids and conform active book to new_cids"""
         diff = set(self.universe.cids) ^ set(new_cids)
         if len(diff) == 0:
             return
@@ -192,6 +219,7 @@ class Book:
             self.exe_qty = np.pad(self.exe_qty, (0, new_contracts), 'constant')
             self.exe_value = np.pad(self.exe_value, (0, new_contracts), 'constant')
             self.mark_price = np.pad(self.mark_price, (0, new_contracts), 'constant')
+            self.unrealized_pnl = np.pad(self.unrealized_pnl, (0, new_contracts), 'constant')
             self.net_cost = np.pad(self.net_cost, (0, new_contracts), 'constant')
 
         if len(removed) > 0:
@@ -210,6 +238,7 @@ class Book:
             'exe_qty': self.exe_qty,
             'exe_val': self.exe_value,
             'mark_pnl': self.mark_pnl,
+            'realized_pnl': self.mark_pnl - self.unrealized_pnl,
             'name': self.universe.names,
         }, index=self.universe.cids)
         summary_contracts.index.name = 'cid'
@@ -222,8 +251,9 @@ class Book:
             'value': self.value,
             'exe_qty': np.sum(self.exe_qty),
             'exe_val': np.sum(self.exe_value),
-            'net_cost': np.sum(self.net_cost),
+            'pos_cost': np.sum(self.pos_cost),
             'mark_pnl': np.sum(self.mark_pnl),
+            'unrealized_pnl': np.sum(self.unrealized_pnl),
         }
         summary_df = pd.DataFrame([list(summary.values())], columns=list(summary))
         return summary_df

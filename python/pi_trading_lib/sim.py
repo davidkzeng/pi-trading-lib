@@ -44,13 +44,19 @@ def optimize_date(cur_date: datetime.date, config: model_config.Config, sim_stat
 
     combined_universe = tuple(set(book.universe.tolist() + daily_universe.tolist()))
     md_sod = market_data.get_snapshot(cur_date, combined_universe)
-    resolutions = pi_trading_lib.data.resolution.get_contract_resolution(combined_universe, date=cur_date)
-    resolutions = {cid: res for cid, res in resolutions.items() if res is not None}
+
+    # Take care of cids in the book universe but not the daily universe. This can occur because:
+    # 1. contracts have resolved
+    # 2. contract drop out of model universes
+
+    all_resolutions = pi_trading_lib.data.resolution.get_contract_resolution(combined_universe, date=cur_date)
+    resolutions = {cid: res for cid, res in all_resolutions.items() if res is not None}
     dead_contracts = set(daily_universe) & set(resolutions.keys())
     assert len(dead_contracts) == 0, f'Model universe has dead contracts{dead_contracts}'
-
     book.apply_resolutions(resolutions)
     book.update_universe(daily_universe, md_sod)
+
+    # After this point, we can conform everything to daily_universe
 
     price_models = []
     price_model_names = []
@@ -74,7 +80,7 @@ def optimize_date(cur_date: datetime.date, config: model_config.Config, sim_stat
 
     fills = book.apply_position_change(new_pos, md_sod)
     for fill in fills:
-        fill.add_sim_info(cur_date)
+        fill.add_sim_info(cur_date, sim_state.fillstats.new_id())
         cid = fill.info['cid']
         for idx, price_model in enumerate(price_models):
             fill.add_model_info({f'model_price_{price_model_names[idx]}': price_model.loc[cid]})
@@ -123,6 +129,8 @@ def daily_sim(begin_date: datetime.date, end_date: datetime.date,
         book_summary = book_summary.reset_index(drop=True).set_index('date')
         book_summaries.append(book_summary)
         cid_summaries.append(cid_summary)
+
+        logging.info(f'\n{book_summary}')
 
     daily_summary = pd.concat(book_summaries)
     daily_cid_summary = pd.concat(cid_summaries)

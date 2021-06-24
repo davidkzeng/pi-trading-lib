@@ -38,7 +38,7 @@ def main():
     cid_parser.add_argument('--csv', action='store_true')
 
     fill_parser = subparsers.add_parser('fill')
-    fill_parser.add_argument('--cid')
+    fill_parser.add_argument('--cid', nargs='*', default=[])
     fill_parser.add_argument('--csv', action='store_true')
 
     args = parser.parse_args()
@@ -75,6 +75,8 @@ def main():
         plt.show()
     elif args.subparser == 'fill':
         fills = sim_result.fillstats
+        if args.cid:
+            fills = fills[fills['cid'].isin(args.cid)].copy()
         fills = df_annotators.add_resolution(fills)
         print_df(fills, args.csv)
     elif args.subparser == 'marginal':
