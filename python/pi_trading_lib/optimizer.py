@@ -94,6 +94,8 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
         new_pos_s == cur_position_s + delta_ss - delta_sb,
         new_pos == new_pos_b - new_pos_s,
         new_cap >= 250,
+        delta_bb <= config['optimizer-max-add-order-size'],
+        delta_ss <= config['optimizer-max-add-order-size'],
         # This constraint eliminates the possibility of going wildly from
         # max long to max short, which should be ok
         net_cost + cp.multiply(price_b, delta_bb) <= PIPOSITION_LIMIT_VALUE,

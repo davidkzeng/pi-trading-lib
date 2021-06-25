@@ -8,11 +8,11 @@ import pandas as pd
 @dataclass
 class FifoEntry:
     cid: int
-    price: int
+    price: int  # price should be the the cost of increasing the long/short position (determined by qty)
     qty: float
 
     def __post_init__(self):
-        assert self.price > 0
+        assert self.price >= 0
         assert self.qty != 0
 
 
@@ -22,6 +22,7 @@ class Fifo:
     def __init__(self):
         self.cid_fifo = {}  # cid -> [fifo queue]
         self.cid_realized_pnl = {} # cid -> float
+        self.cid_fees = {} # cid -> float
 
     def process_pos_change(self, changes: pd.DataFrame):
         for cid, change in changes.iterrows():
@@ -30,8 +31,21 @@ class Fifo:
             self.apply_fifo(entry)
 
     def resolve(self, cids: t.Dict[int, float]):
-        for cid in cids:
+        for cid, res in cids.items():
             if cid in self.cid_fifo:
+                queue = self.cid_fifo[cid]
+
+                if len(queue) > 0:
+                    qty_sum = 0
+                    for entry in queue:
+                        qty_sum += entry.qty
+                    res_qty = -1 * qty_sum
+                    if res_qty > 0:
+                        self.apply_fifo(FifoEntry(cid, res, res_qty))
+                    else:
+                        self.apply_fifo(FifoEntry(cid, 1 - res, res_qty))
+
+                assert len(self.cid_fifo[cid]) == 0
                 del self.cid_fifo[cid]
 
     def apply_fifo(self, entry: FifoEntry):
@@ -67,13 +81,17 @@ class Fifo:
 
         if cid not in self.cid_realized_pnl:
             self.cid_realized_pnl[cid] = 0.0
+        if cid not in self.cid_fees:
+            self.cid_fees[cid] = 0.0
 
         if abs(old.qty) >= abs(new.qty):
             self.cid_realized_pnl[cid] += abs(new.qty) * (1 - new.price - old.price)
+            self.cid_fees[cid] += max(0, 0.1 * abs(new.qty) * (1 - new.price - old.price))
             old.qty += new.qty
             new.qty = 0
         else:
             self.cid_realized_pnl[cid] += abs(old.qty) * (1 - new.price - old.price)
+            self.cid_fees[cid] += max(0, 0.1 * abs(old.qty) * (1 - new.price - old.price))
             new.qty += old.qty
             old.qty = 0
 
@@ -94,3 +112,6 @@ class Fifo:
 
     def realized_pnl(self) -> pd.Series:
         return pd.Series(self.cid_realized_pnl, name='realized_pnl')
+
+    def fees(self) -> pd.Series:
+        return pd.Series(self.cid_fees, name='fees')

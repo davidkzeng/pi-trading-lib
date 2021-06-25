@@ -22,6 +22,8 @@ import pi_trading_lib.timers
 import pi_trading_lib.work_dir as work_dir
 
 
+# TODO: try sampling on price changes only?
+# conf intervals
 @pi_trading_lib.decorators.memoize()
 @pi_trading_lib.timers.timer
 def sample_date(date: datetime.date, binary: bool, config: model_config.Config):
@@ -51,6 +53,12 @@ def sample(begin_date: datetime.date, end_date: datetime.date, binary: bool, con
     all_samples_df = pi_trading_lib.df_annotators.add_resolution(all_samples_df, end_date, cid_col='contract_id')
     all_samples_df = all_samples_df.dropna()
 
+    if binary and config['calibration-model-fit-symmetric-binary']:
+        reverse_df = all_samples_df.copy()
+        reverse_df['trade_price'] = 1.0 - reverse_df['trade_price']
+        reverse_df['resolution'] = 1.0 - reverse_df['resolution']
+        all_samples_df = pd.concat([all_samples_df, reverse_df])
+
     return all_samples_df
 
 
@@ -66,12 +74,14 @@ def _fit_for_price(px: float, window_df: pd.DataFrame) -> float:
 
 
 @pi_trading_lib.timers.timer
-def fit_model(date: datetime.date, binary: bool, config: model_config.Config) -> pd.Series:
-    series_name = 'bin_model_price' if binary else 'non_bin_model_price'
+def fit_model(date: datetime.date, binary: bool, config: model_config.Config) -> pd.DataFrame:
+    series_name = 'bin' if binary else 'non_bin'
+    cents_index = np.array([i for i in range(1, 100)])
+
     if date < date_util.from_str(config['calibration-model-fit-active-date']):
         nan_array = np.empty(99)
         nan_array[:] = np.nan
-        ser = pd.Series(nan_array, name=series_name, index=[i for i in range(1, 100)])
+        ser = pd.DataFrame(nan_array, columns=[f'{series_name}_model_price'], index=cents_index)
         ser.index.name = 'price_cents'
         return ser
 
@@ -83,16 +93,7 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     # samples at edge of window have e^{-alpha}. e^{-1} ~= 0.368
     weight_alpha = config['calibration-model-fit-sample-weight-alpha'] * 1 / window_width
 
-    if config['calibration-model-fit-market-normalize']:
-        market_counts = sample_df.groupby('market_id').size()
-        market_weights = 1 / market_counts
-        market_weights_df = market_weights.to_frame(name='market_weight')
-    else:
-        market_ids = sample_df['market_id'].unique()
-        market_weights_df = pd.DataFrame([], index=market_ids)
-        market_weights_df['market_weight'] = 1.0
-
-    sample_df = sample_df.merge(market_weights_df, left_on='market_id', right_index=True, how="left")
+    sample_df = sample_df[(sample_df['trade_price'] > 0.01) & (sample_df['trade_price'] < 0.99)]
 
     futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
@@ -103,32 +104,52 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
             df_filter = (sample_df['trade_price'] >= window_lower) & (sample_df['trade_price'] <= window_upper)
             window_df = sample_df[df_filter].copy()
             window_df['dist_weight'] = np.round(np.exp(-1.0 * weight_alpha * (window_df['trade_price'] - px).abs()), decimals=3)
-            window_df['weight'] = window_df['dist_weight'] * window_df['market_weight']
+
+            if config['calibration-model-fit-window-market-normalize']:
+                market_total_weight = window_df.groupby('contract_id').size()
+                market_total_weight = market_total_weight.reindex(window_df['contract_id'].unique()).fillna(0.001)
+                market_weight = 1 / market_total_weight
+                market_weight = market_weight.pow(0.75)
+                market_weight.name = 'market_weight'
+                market_weight_df = market_weight.to_frame()
+                window_df = window_df.merge(market_weight_df, left_on='contract_id', right_index=True, how="left")
+                window_df['weight'] = window_df['dist_weight'] * window_df['market_weight']
+            else:
+                window_df['weight'] = window_df['dist_weight']
             future = executor.submit(_fit_for_price, px, window_df)
             futures.append(future)
     calibration_model = [future.result() for future in futures]
 
-    calibration_ser = pd.Series(calibration_model, name=series_name, index=[i for i in range(1, 100)])
-    calibration_ser.index.name = 'price_cents'
-    return calibration_ser
+    sample_df['trade_price_cents'] = (sample_df['trade_price'] * 100).astype(int)
+    sample_density_ser = sample_df.groupby('trade_price_cents').size().reindex(cents_index).fillna(0.0)
+
+    calibration_df = pd.DataFrame(calibration_model, columns=[f'{series_name}_model_price'], index=cents_index)
+    calibration_df[f'{series_name}_sample_density'] = sample_density_ser
+    calibration_df.index.name = 'price_cents'
+    return calibration_df
 
 
 @pi_trading_lib.timers.timer
-def generate_parameters(date: datetime.date, config: model_config.Config) -> pd.DataFrame:
-    output = os.path.join(work_dir.get_uri('calibration_model', config.component_params('calibration-model-fit'), date_1=date), 'model.csv')
+def generate_parameters(date: datetime.date, config: model_config.Config) -> str:
+    output_dir = os.path.join(work_dir.get_uri('calibration_model', config.component_params('calibration-model-fit'), date_1=date))
 
-    if os.path.exists(output):
-        df = pd.read_csv(output, index_col='price_cents')
-        return df
+    if os.path.exists(output_dir):
+        return output_dir
 
-    binary_ser = fit_model(date, True, config)
-    nonbinary_ser = fit_model(date, False, config)
+    binary_df = fit_model(date, True, config)
+    nonbinary_df = fit_model(date, False, config)
 
-    calibration_df = pd.concat([binary_ser, nonbinary_ser], axis=1)
+    calibration_df = binary_df.join(nonbinary_df)
 
-    with fs.safe_open(output, 'w+') as f:
-        calibration_df.to_csv(f)
-    return calibration_df
+    with fs.atomic_output(output_dir) as tmpdir:
+        with open(os.path.join(tmpdir, 'model.csv'), 'w+') as f:
+            calibration_df.to_csv(f)
+
+    return output_dir
+
+
+def get_model_df(model_dir: str) -> pd.DataFrame:
+    return pd.read_csv(os.path.join(model_dir, 'model.csv'), index_col='price_cents')
 
 
 class CalibrationModel(Model):
@@ -140,7 +161,7 @@ class CalibrationModel(Model):
         return snapshot
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
-        model = generate_parameters(date, config)
+        model = get_model_df(generate_parameters(date, config))
         md = market_data.get_snapshot(date)
 
         contracts = md.data.index.get_level_values('contract_id').unique().tolist()
@@ -184,7 +205,7 @@ def main():
     config = model_config.get_config('calibration_model').component_params('calibration-model-fit')
     config = pi_trading_lib.model_config.override_config(config, args.override)
 
-    model_df = generate_parameters(date_util.from_str(args.date), config)
+    model_df = get_model_df(generate_parameters(date_util.from_str(args.date), config))
     model_df['price'] = model_df.index.get_level_values(0) / 100
     model_df = model_df.reset_index(drop=True)
     model_df = model_df.set_index('price', drop=False)
@@ -218,7 +239,10 @@ def main():
             prof_per_share = snapshot_df['prof'].mean()
             print(ther_prof, prof_per_share)
 
-    model_df.plot()
+    fig, axs = plt.subplots(nrows=2)
+    model_df[['bin_model_price', 'non_bin_model_price', 'price']].plot(ax=axs[0])
+    model_df[['bin_sample_density', 'non_bin_sample_density']].rolling(5).mean().iloc[20:80].plot(ax=axs[1])
+
     if args.save:
         save_dir = work_dir.get_uri('cal_image', config, args.date)
         if not os.path.exists(save_dir):

@@ -46,7 +46,7 @@ def main():
     sim_result = SimResult.load(args.path)
 
     if args.subparser == 'plot':
-        sim_result.daily_summary[['capital', 'pos_value', 'value', 'net_cost', 'mark_pnl']].plot()
+        sim_result.daily_summary[['capital', 'pos_value', 'value', 'pos_cost', 'mark_pnl']].plot()
         plt.show()
     elif args.subparser == 'pnl':
         print(sim_result.sharpe)

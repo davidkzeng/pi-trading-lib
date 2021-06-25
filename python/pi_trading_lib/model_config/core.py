@@ -6,7 +6,8 @@ config = {
     'capital': 10000.0,
     'use-final-res': False,
 
-    'optimizer-position-size-mult': 5,
-    'optimizer-std-penalty': 0.75,
+    'optimizer-position-size-mult': 10,
+    'optimizer-std-penalty': 0.5,
     'optimizer-take-edge': 0.02,
+    'optimizer-max-add-order-size': 200,
 }

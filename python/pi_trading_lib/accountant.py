@@ -115,6 +115,7 @@ class Book:
         self.pos_cost = np.zeros(self.universe.size)
         self.mark_pnl = np.zeros(self.universe.size)
         self.unrealized_pnl = np.zeros(self.universe.size)
+        self.fees = np.zeros(self.universe.size)
 
         self._recompute()
 
@@ -126,7 +127,8 @@ class Book:
         self.pos_cost = np.around(self.pos_cost, decimals=2)
         self.unrealized_pnl = self.mark_value - self.pos_cost
 
-        self.mark_pnl = self.mark_value - self.net_cost
+        self.fees = self.fifo.fees().reindex(self.universe.cids).fillna(0.0).to_numpy()
+        self.mark_pnl = self.mark_value - self.net_cost - self.fees
 
     def set_mark_price(self, mark_price: pd.Series):
         mark_price = mark_price.reindex(self.universe.cids).to_numpy()
@@ -254,6 +256,7 @@ class Book:
             'pos_cost': np.sum(self.pos_cost),
             'mark_pnl': np.sum(self.mark_pnl),
             'unrealized_pnl': np.sum(self.unrealized_pnl),
+            'fees': np.sum(self.fees),
         }
         summary_df = pd.DataFrame([list(summary.values())], columns=list(summary))
         return summary_df

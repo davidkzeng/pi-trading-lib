@@ -8,7 +8,7 @@ config = {
     'election-model-enabled': True,
     'return-weight-calibration-model': 2.0,
     'return-weight-election-model': 3.0,
-    'sim-begin-date': '20201101',
+    'sim-begin-date': '20201020',
     'sim-end-date': '20210401',
     'use-final-res': False,
 }
