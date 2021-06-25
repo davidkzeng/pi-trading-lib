@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+import seaborn as sns
 
 from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
 from pi_trading_lib.model import Model
@@ -88,6 +89,14 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     begin_date = date_util.from_str(config['calibration-model-fit-begin-date'])
 
     sample_df = sample(begin_date, date_util.prev(date), binary, config)
+
+    if config['calibration-model-fit-market-resample-seed'] is not None:
+        seed = config['calibration-model-fit-market-resample-seed']
+        sample_df = pi_trading_lib.df_annotators.add_begin_date(sample_df, cid_col='contract_id')
+        begin_dates = sample_df['begin_date'].unique()
+        rng = np.random.default_rng(seed)
+        sampled_begin_dates = rng.choice(begin_dates, len(begin_dates) // 2)
+        sample_df = sample_df[sample_df['begin_date'].isin(sampled_begin_dates)]
 
     window_width = config['calibration-model-fit-window-size']
     # samples at edge of window have e^{-alpha}. e^{-1} ~= 0.368
@@ -191,14 +200,49 @@ class CalibrationModel(Model):
         return 'calibration-model'
 
 
+# ============================= Model debugging logic =========================
+
+
+def generate_confidence_intervals(config: model_config.Config, date: datetime.date, samples: int):
+    model_dfs = []
+    for i in range(samples):
+        print('taking sample ' + str(i))
+        config = config.override({'calibration-model-fit-market-resample-seed': i})
+        model_df = get_model_df(generate_parameters(date, config))
+        model_dfs.append(model_df)
+    merged = pd.concat(model_dfs)
+    merged['non_bin_model_price'] = merged['non_bin_model_price'] * 100
+    merged['bin_model_price'] = merged['bin_model_price'] * 100
+
+    conf_df = merged.groupby('price_cents').agg(
+        {'non_bin_model_price': ['min', 'median', 'max'],
+         'bin_model_price': ['min', 'median', 'max']}
+    )
+    conf_df = conf_df.stack(level=0).swaplevel().sort_index()
+    print(conf_df)
+    conf_df = conf_df.loc['non_bin_model_price']
+    conf_df['price'] = conf_df.index
+    print(conf_df)
+
+    sns.lineplot(data=merged, x='price_cents', y='non_bin_model_price')
+    sns.lineplot(data=merged, x='price_cents', y='bin_model_price')
+    sns.lineplot(data=conf_df['price'])
+    plt.show()
+    print(conf_df)
+
+
 def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--date', required=True)
     parser.add_argument('--override', default='')
-    parser.add_argument('--save', action='store_true')
 
+    # alternate commands, default is to plot fitted curve
     parser.add_argument('--eval', action='store_true')
+    parser.add_argument('--conf', action='store_true')
+
+    # arguments for default command
+    parser.add_argument('--save', action='store_true')
 
     args = parser.parse_args()
 
@@ -238,18 +282,20 @@ def main():
             ther_prof = snapshot_df['prof'].sum()
             prof_per_share = snapshot_df['prof'].mean()
             print(ther_prof, prof_per_share)
-
-    fig, axs = plt.subplots(nrows=2)
-    model_df[['bin_model_price', 'non_bin_model_price', 'price']].plot(ax=axs[0])
-    model_df[['bin_sample_density', 'non_bin_sample_density']].rolling(5).mean().iloc[20:80].plot(ax=axs[1])
-
-    if args.save:
-        save_dir = work_dir.get_uri('cal_image', config, args.date)
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        plt.savefig(os.path.join(save_dir, 'image.png'))
+    elif args.conf:
+        generate_confidence_intervals(config, date_util.from_str(args.date), 10)
     else:
-        plt.show()
+        fig, axs = plt.subplots(nrows=2)
+        model_df[['bin_model_price', 'non_bin_model_price', 'price']].plot(ax=axs[0])
+        model_df[['bin_sample_density', 'non_bin_sample_density']].rolling(5).mean().iloc[20:80].plot(ax=axs[1])
+
+        if args.save:
+            save_dir = work_dir.get_uri('cal_image', config, args.date)
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            plt.savefig(os.path.join(save_dir, 'image.png'))
+        else:
+            plt.show()
 
 
 if __name__ == "__main__":
