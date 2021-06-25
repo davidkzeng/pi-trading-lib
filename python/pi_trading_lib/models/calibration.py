@@ -1,13 +1,14 @@
 import argparse
+import concurrent.futures
 import datetime
+import logging
 import os
 import typing as t
-import concurrent.futures
 
+from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
 import seaborn as sns
 
 from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
@@ -18,6 +19,7 @@ import pi_trading_lib.date_util as date_util
 import pi_trading_lib.decorators
 import pi_trading_lib.df_annotators
 import pi_trading_lib.fs as fs
+import pi_trading_lib.logging_ext as logging_ext
 import pi_trading_lib.model_config as model_config
 import pi_trading_lib.timers
 import pi_trading_lib.work_dir as work_dir
@@ -89,6 +91,7 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     begin_date = date_util.from_str(config['calibration-model-fit-begin-date'])
 
     sample_df = sample(begin_date, date_util.prev(date), binary, config)
+    sample_df = sample_df[(sample_df['trade_price'] > 0.01) & (sample_df['trade_price'] < 0.99)]
 
     if config['calibration-model-fit-market-resample-seed'] is not None:
         seed = config['calibration-model-fit-market-resample-seed']
@@ -102,7 +105,15 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     # samples at edge of window have e^{-alpha}. e^{-1} ~= 0.368
     weight_alpha = config['calibration-model-fit-sample-weight-alpha'] * 1 / window_width
 
-    sample_df = sample_df[(sample_df['trade_price'] > 0.01) & (sample_df['trade_price'] < 0.99)]
+    if config['calibration-model-fit-market-normalize'] == 'global':
+        market_total_weight = sample_df.groupby('contract_id').size()
+        market_total_weight = market_total_weight.reindex(sample_df['contract_id'].unique()).fillna(0.001)
+        market_weight = 1 / market_total_weight
+        market_weight.name = 'market_weight'
+        market_weight_df = market_weight.to_frame()
+        sample_df = sample_df.merge(market_weight_df, left_on='contract_id', right_index=True, how="left")
+    elif config['calibration-model-fit-market-normalize'] is None:
+        sample_df['market_weight'] = 1.0
 
     futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
@@ -114,7 +125,7 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
             window_df = sample_df[df_filter].copy()
             window_df['dist_weight'] = np.round(np.exp(-1.0 * weight_alpha * (window_df['trade_price'] - px).abs()), decimals=3)
 
-            if config['calibration-model-fit-window-market-normalize']:
+            if config['calibration-model-fit-market-normalize'] == 'local':
                 market_total_weight = window_df.groupby('contract_id').size()
                 market_total_weight = market_total_weight.reindex(window_df['contract_id'].unique()).fillna(0.001)
                 market_weight = 1 / market_total_weight
@@ -122,9 +133,8 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
                 market_weight.name = 'market_weight'
                 market_weight_df = market_weight.to_frame()
                 window_df = window_df.merge(market_weight_df, left_on='contract_id', right_index=True, how="left")
-                window_df['weight'] = window_df['dist_weight'] * window_df['market_weight']
-            else:
-                window_df['weight'] = window_df['dist_weight']
+
+            window_df['weight'] = window_df['dist_weight'] * window_df['market_weight']
             future = executor.submit(_fit_for_price, px, window_df)
             futures.append(future)
     calibration_model = [future.result() for future in futures]
@@ -220,31 +230,39 @@ def generate_confidence_intervals(config: model_config.Config, date: datetime.da
     )
     conf_df = conf_df.stack(level=0).swaplevel().sort_index()
     print(conf_df)
-    conf_df = conf_df.loc['non_bin_model_price']
-    conf_df['price'] = conf_df.index
-    print(conf_df)
+
+    price_line = pd.Series(np.arange(1, 100), index=np.arange(1, 100), name='price')
+    price_line.index.name = 'price_cents'
 
     sns.lineplot(data=merged, x='price_cents', y='non_bin_model_price')
     sns.lineplot(data=merged, x='price_cents', y='bin_model_price')
-    sns.lineplot(data=conf_df['price'])
+    sns.lineplot(data=price_line['price'])
     plt.show()
-    print(conf_df)
 
 
 def main():
     parser = argparse.ArgumentParser()
 
+    # common
     parser.add_argument('--date', required=True)
     parser.add_argument('--override', default='')
+    parser.add_argument('--debug', action='store_true')
 
     # alternate commands, default is to plot fitted curve
     parser.add_argument('--eval', action='store_true')
+
     parser.add_argument('--conf', action='store_true')
+    parser.add_argument('--conf-samples', default=10, type=int)
 
     # arguments for default command
     parser.add_argument('--save', action='store_true')
 
     args = parser.parse_args()
+
+    if args.debug:
+        logging_ext.init_logging(level=logging.DEBUG)
+    else:
+        logging_ext.init_logging()
 
     config = model_config.get_config('calibration_model').component_params('calibration-model-fit')
     config = pi_trading_lib.model_config.override_config(config, args.override)
@@ -253,9 +271,6 @@ def main():
     model_df['price'] = model_df.index.get_level_values(0) / 100
     model_df = model_df.reset_index(drop=True)
     model_df = model_df.set_index('price', drop=False)
-
-    print(model_df)
-    pi_trading_lib.timers.report_timers()
 
     if args.eval:
         for binary in [False, True]:
@@ -283,8 +298,10 @@ def main():
             prof_per_share = snapshot_df['prof'].mean()
             print(ther_prof, prof_per_share)
     elif args.conf:
-        generate_confidence_intervals(config, date_util.from_str(args.date), 10)
+        generate_confidence_intervals(config, date_util.from_str(args.date), args.conf_samples)
     else:
+        print(model_df)
+
         fig, axs = plt.subplots(nrows=2)
         model_df[['bin_model_price', 'non_bin_model_price', 'price']].plot(ax=axs[0])
         model_df[['bin_sample_density', 'non_bin_sample_density']].rolling(5).mean().iloc[20:80].plot(ax=axs[1])
@@ -296,6 +313,8 @@ def main():
             plt.savefig(os.path.join(save_dir, 'image.png'))
         else:
             plt.show()
+
+    pi_trading_lib.timers.report_timers()
 
 
 if __name__ == "__main__":

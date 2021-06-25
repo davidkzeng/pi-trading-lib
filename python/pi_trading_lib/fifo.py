@@ -8,7 +8,7 @@ import pandas as pd
 @dataclass
 class FifoEntry:
     cid: int
-    price: int  # price should be the the cost of increasing the long/short position (determined by qty)
+    price: float  # price should be the the cost of increasing the long/short position (determined by qty)
     qty: float
 
     def __post_init__(self):
