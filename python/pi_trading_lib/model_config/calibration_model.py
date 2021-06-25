@@ -2,7 +2,6 @@ import typing as t
 
 config: t.Dict = {
     'calibration-model-fit-begin-date': '20200817',
-    'calibration-model-fit-active-date': '20210101',
     'calibration-model-fit-window-size': 0.10,
     'calibration-model-fit-sample-weight-alpha': 1.0,
     'calibration-model-fit-market-normalize': 'local', # 'local', 'global', or None
@@ -11,6 +10,7 @@ config: t.Dict = {
     'calibration-model-fit-sample-method': 'sod', # 'sod' or 'change'
     'calibration-model-fit-sample-no-correct': False,
 
+    'calibration-model-active-date': '20201201',
     'calibration-model-enable-binary': True,
     'calibration-model-enable-non-binary': True,
     'calibration-model-enabled': False,

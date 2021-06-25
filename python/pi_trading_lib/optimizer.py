@@ -26,6 +26,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     assert return_models is not None  # unused
 
     num_contracts = len(snapshot.data)
+    logging.debug(f'optimizing over {num_contracts} contracts')
 
     assert len(price_models) == len(price_model_weights)
     for pm in price_models:
@@ -102,12 +103,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
         net_cost + cp.multiply(price_s, delta_ss) <= PIPOSITION_LIMIT_VALUE,
     ]
 
-    p_win = agg_price_model
-    contract_return_stdev = np.sqrt(p_win * (1 - p_win))
-    contract_position_stdev = (
-        cp.multiply(new_pos_b, contract_return_stdev) + cp.multiply(new_pos_s, contract_return_stdev)
-    )
-    stdev_return = cp.norm(contract_position_stdev)
+    stdev_return = cp.sum_squares(new_pos)
 
     # add constant for when margin_factors is empty to ensure obj_factor has type Expr
     obj_factor = -1 * cp.sum(margin_factors) + cp.expressions.constants.Constant(0)
@@ -116,7 +112,7 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     objective = obj_return + obj_std + obj_factor
     problem = cp.Problem(cp.Maximize(objective), constraints)
-    problem.solve(abstol=1e-4)
+    problem.solve(solver=cp.ECOS, abstol=2.0, reltol=1e-4, feastol=1e-6)
 
     if problem.status not in cvxpy.settings.SOLUTION_PRESENT:
         print(problem.status)

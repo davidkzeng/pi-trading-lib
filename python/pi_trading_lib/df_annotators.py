@@ -26,7 +26,7 @@ def add_contract_dates(df: pd.DataFrame, cid_col: str = 'cid') -> pd.DataFrame:
     contract_begin_dates = {cid: info['begin_date'] for cid, info in contract_info_map.items()}
     contract_end_dates = {cid: info['end_date'] for cid, info in contract_info_map.items()}
     df['begin_date'] = df[cid_col].map(contract_begin_dates)
-    df['end_date'] = df[cid_col].map(contract_begin_dates)
+    df['end_date'] = df[cid_col].map(contract_end_dates)
     return df
 
 

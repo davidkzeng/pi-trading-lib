@@ -2,7 +2,7 @@ import importlib
 import typing as t
 
 
-ParamValue = t.Union[str, float, bool]
+ParamValue = t.Optional[t.Union[str, float, bool]]
 
 
 class Config:

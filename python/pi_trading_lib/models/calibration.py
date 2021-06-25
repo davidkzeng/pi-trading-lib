@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from pi_trading_lib.data.resolution import NO_CORRECT_CONTRACT_MARKETS
+from pi_trading_lib.data.resolution import NO_CORRECT_CONTRACT_MARKETS, UNRESOLVED_CONTRACTS
 from pi_trading_lib.model import Model
 import pi_trading_lib.data.contracts
 import pi_trading_lib.data.market_data as market_data
@@ -42,6 +42,7 @@ def sample_date(date: datetime.date, binary: bool, config: model_config.Config) 
 
         if not config['calibration-model-fit-sample-no-correct']:
             snapshot = snapshot[~snapshot['market_id'].isin(NO_CORRECT_CONTRACT_MARKETS)]
+            snapshot = snapshot[~snapshot['market_id'].isin(UNRESOLVED_CONTRACTS)]
 
         # some arbitrary filters to avoid bad samples
         snapshot['wide_market'] = ((snapshot['bid_price'] - snapshot['ask_price']).abs() > 0.1) | ((snapshot['trade_price'] - snapshot['mid_price']).abs() > 0.05)
@@ -78,6 +79,10 @@ def sample(begin_date: datetime.date, end_date: datetime.date, binary: bool, con
 
 
 def _fit_for_price(px: float, window_df: pd.DataFrame) -> float:
+    if len(window_df) == 0:
+        logging.debug(f'No data from price {px}')
+        return px
+
     lin_reg = LinearRegression()
 
     lin_model = lin_reg.fit(np.reshape(window_df['trade_price'].to_numpy(), (-1, 1)),
@@ -93,24 +98,17 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     series_name = 'bin' if binary else 'non_bin'
     cents_index = np.array([i for i in range(1, 100)])
 
-    if date < date_util.from_str(config['calibration-model-fit-active-date']):
-        nan_array = np.empty(99)
-        nan_array[:] = np.nan
-        ser = pd.DataFrame(nan_array, columns=[f'{series_name}_model_price'], index=cents_index)
-        ser.index.name = 'price_cents'
-        return ser
-
     begin_date = date_util.from_str(config['calibration-model-fit-begin-date'])
 
     sample_df = sample(begin_date, date_util.prev(date), binary, config)
 
     if config['calibration-model-fit-market-resample-seed'] is not None:
+        # used for bootstrap estimate of fitted model parameter distribution
         seed = config['calibration-model-fit-market-resample-seed']
-        sample_df = pi_trading_lib.df_annotators.add_contract_dates(sample_df, cid_col='contract_id')
-        begin_dates = sample_df['end_date'].unique()
         rng = np.random.default_rng(seed)
-        sampled_begin_dates = rng.choice(begin_dates, len(begin_dates) // 2)
-        sample_df = sample_df[sample_df['end_date'].isin(sampled_begin_dates)]
+        mids = sample_df['market_id'].unique()
+        sampled_mids = rng.choice(mids, len(mids) // 2)
+        sample_df = sample_df[sample_df['market_id'].isin(sampled_mids)]
 
     window_width = config['calibration-model-fit-window-size']
     # samples at edge of window have e^{-alpha}. e^{-1} ~= 0.368
@@ -153,7 +151,9 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     sample_df['trade_price_cents'] = (sample_df['trade_price'] * 100).astype(int)
     sample_density_ser = sample_df.groupby('trade_price_cents').size().reindex(cents_index).fillna(0.0)
 
-    calibration_df = pd.DataFrame(calibration_model, columns=[f'{series_name}_model_price'], index=cents_index)
+    model_col = f'{series_name}_model_price'
+    calibration_df = pd.DataFrame(calibration_model, columns=[model_col], index=cents_index)
+    calibration_df[model_col] = calibration_df[model_col].rolling(window=5, min_periods=1, center=True).mean()
     calibration_df[f'{series_name}_sample_density'] = sample_density_ser
     calibration_df.index.name = 'price_cents'
     return calibration_df
@@ -191,6 +191,9 @@ class CalibrationModel(Model):
         return snapshot
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
+        if date < date_util.from_str(config['calibration-model-active-date']):
+            return None
+
         model = get_model_df(generate_parameters(date, config))
         md = market_data.get_snapshot(date)
 
@@ -205,10 +208,10 @@ class CalibrationModel(Model):
         merged = df.merge(model, how='left', left_on='rounded_price', right_index=True)
         merged['model_price'] = np.nan
 
-        if config['calibration-model-enable-binary']:
-            merged.loc[merged['is_binary'] == False, 'model_price'] = merged.loc[merged['is_binary'] == False, 'bin_model_price']  # noqa
         if config['calibration-model-enable-non-binary']:
-            merged.loc[merged['is_binary'] == True, 'model_price'] = merged.loc[merged['is_binary'] == True, 'non_bin_model_price']  # noqa
+            merged.loc[merged['is_binary'] == False, 'model_price'] = merged.loc[merged['is_binary'] == False, 'non_bin_model_price']  # noqa
+        if config['calibration-model-enable-binary']:
+            merged.loc[merged['is_binary'] == True, 'model_price'] = merged.loc[merged['is_binary'] == True, 'bin_model_price']  # noqa
 
         return merged['model_price']
 
@@ -230,7 +233,6 @@ def generate_confidence_intervals(config: model_config.Config, date: datetime.da
         print('taking sample ' + str(i))
         config = config.override({'calibration-model-fit-market-resample-seed': i})
         model_df = get_model_df(generate_parameters(date, config))
-        model_df = model_df.rolling(window=5, min_periods=1, center=True).mean()
         model_dfs.append(model_df)
     merged = pd.concat(model_dfs)
     merged['non_bin_model_price'] = merged['non_bin_model_price'] * 100

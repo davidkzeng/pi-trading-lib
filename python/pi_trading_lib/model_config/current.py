@@ -5,7 +5,7 @@ config = {
     **fte_election.config,
     **calibration_model.config,
     'calibration-model-enabled': True,
-    'election-model-enabled': True,
+    'election-model-enabled': False,
     'return-weight-calibration-model': 2.0,
     'return-weight-election-model': 3.0,
     'sim-begin-date': '20201020',

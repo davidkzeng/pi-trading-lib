@@ -128,6 +128,7 @@ class Book:
         self.unrealized_pnl = self.mark_value - self.pos_cost
 
         self.fees = self.fifo.fees().reindex(self.universe.cids).fillna(0.0).to_numpy()
+        # incorporate fees into mark_pnl once we have proper running estimate
         self.mark_pnl = self.mark_value - self.net_cost - self.fees
 
     def set_mark_price(self, mark_price: pd.Series):
