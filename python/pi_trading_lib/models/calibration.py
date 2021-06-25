@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from pi_trading_lib.data.resolution_data import NO_CORRECT_CONTRACT_MARKETS
+from pi_trading_lib.data.resolution import NO_CORRECT_CONTRACT_MARKETS
 from pi_trading_lib.model import Model
 import pi_trading_lib.data.contracts
 import pi_trading_lib.data.market_data as market_data
@@ -25,32 +25,44 @@ import pi_trading_lib.timers
 import pi_trading_lib.work_dir as work_dir
 
 
-# TODO: try sampling on price changes only?
-# conf intervals
 @pi_trading_lib.decorators.memoize()
 @pi_trading_lib.timers.timer
-def sample_date(date: datetime.date, binary: bool, config: model_config.Config):
-    snapshot = market_data.get_snapshot(date).data
-    contracts = snapshot.index.tolist()
+def sample_date(date: datetime.date, binary: bool, config: model_config.Config) -> pd.DataFrame:
+    if config['calibration-model-fit-sample-method'] == 'sod':
+        snapshot = market_data.get_snapshot(date).data
+        contracts = snapshot.index.tolist()
 
-    binary_contract_map = pi_trading_lib.data.contracts.is_binary_contract(contracts)
-    binary_contracts = [cid for cid, val in binary_contract_map.items() if val]
+        binary_contract_map = pi_trading_lib.data.contracts.is_binary_contract(contracts)
+        binary_contracts = [cid for cid, val in binary_contract_map.items() if val]
 
-    if binary:
-        snapshot = snapshot[snapshot.index.get_level_values(0).isin(binary_contracts)]
+        if binary:
+            snapshot = snapshot[snapshot.index.get_level_values(0).isin(binary_contracts)]
+        else:
+            snapshot = snapshot[~snapshot.index.get_level_values(0).isin(binary_contracts)]
+
+        if not config['calibration-model-fit-sample-no-correct']:
+            snapshot = snapshot[~snapshot['market_id'].isin(NO_CORRECT_CONTRACT_MARKETS)]
+
+        # some arbitrary filters to avoid bad samples
+        snapshot['wide_market'] = ((snapshot['bid_price'] - snapshot['ask_price']).abs() > 0.1) | ((snapshot['trade_price'] - snapshot['mid_price']).abs() > 0.05)
+        snapshot = snapshot[~snapshot['wide_market']]
+
+        snapshot['dead_market'] = (
+            ((snapshot['bid_price'] == 0.0) & (snapshot['ask_price'] == 0.01) & (snapshot['trade_price'] == 0.01)) |
+            ((snapshot['bid_price'] == 0.99) & (snapshot['ask_price'] == 1.0) & (snapshot['trade_price'] == 0.99))
+        )
+        snapshot = snapshot[~snapshot['dead_market']]
+
+        return snapshot.reset_index()[['contract_id', 'market_id', 'trade_price']]
     else:
-        snapshot = snapshot[~snapshot.index.get_level_values(0).isin(binary_contracts)]
-
-    snapshot = snapshot[~snapshot.index.get_level_values(0).isin(NO_CORRECT_CONTRACT_MARKETS)]
-
-    return snapshot.reset_index()[['contract_id', 'market_id', 'trade_price']]
+        assert False, 'only sod sample method is supported'
 
 
 @pi_trading_lib.timers.timer
 def sample(begin_date: datetime.date, end_date: datetime.date, binary: bool, config: model_config.Config):
     dfs = []
     for date in date_util.date_range(begin_date, end_date, skip_dates=market_data.missing_market_data_days()):
-        date_sample_df = sample_date(date, binary, config)
+        date_sample_df = sample_date(date, binary, config.component_params('calibration-model-fit-sample'))
         dfs.append(date_sample_df)
     all_samples_df = pd.concat(dfs)
     all_samples_df = pi_trading_lib.df_annotators.add_resolution(all_samples_df, end_date, cid_col='contract_id')
@@ -91,15 +103,14 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     begin_date = date_util.from_str(config['calibration-model-fit-begin-date'])
 
     sample_df = sample(begin_date, date_util.prev(date), binary, config)
-    sample_df = sample_df[(sample_df['trade_price'] > 0.01) & (sample_df['trade_price'] < 0.99)]
 
     if config['calibration-model-fit-market-resample-seed'] is not None:
         seed = config['calibration-model-fit-market-resample-seed']
-        sample_df = pi_trading_lib.df_annotators.add_begin_date(sample_df, cid_col='contract_id')
-        begin_dates = sample_df['begin_date'].unique()
+        sample_df = pi_trading_lib.df_annotators.add_contract_dates(sample_df, cid_col='contract_id')
+        begin_dates = sample_df['end_date'].unique()
         rng = np.random.default_rng(seed)
         sampled_begin_dates = rng.choice(begin_dates, len(begin_dates) // 2)
-        sample_df = sample_df[sample_df['begin_date'].isin(sampled_begin_dates)]
+        sample_df = sample_df[sample_df['end_date'].isin(sampled_begin_dates)]
 
     window_width = config['calibration-model-fit-window-size']
     # samples at edge of window have e^{-alpha}. e^{-1} ~= 0.368
@@ -210,7 +221,7 @@ class CalibrationModel(Model):
         return 'calibration-model'
 
 
-# ============================= Model debugging logic =========================
+# ============================= Model debugging, metrics =========================
 
 
 def generate_confidence_intervals(config: model_config.Config, date: datetime.date, samples: int):
@@ -219,6 +230,7 @@ def generate_confidence_intervals(config: model_config.Config, date: datetime.da
         print('taking sample ' + str(i))
         config = config.override({'calibration-model-fit-market-resample-seed': i})
         model_df = get_model_df(generate_parameters(date, config))
+        model_df = model_df.rolling(window=5, min_periods=1, center=True).mean()
         model_dfs.append(model_df)
     merged = pd.concat(model_dfs)
     merged['non_bin_model_price'] = merged['non_bin_model_price'] * 100
@@ -234,9 +246,17 @@ def generate_confidence_intervals(config: model_config.Config, date: datetime.da
     price_line = pd.Series(np.arange(1, 100), index=np.arange(1, 100), name='price')
     price_line.index.name = 'price_cents'
 
-    sns.lineplot(data=merged, x='price_cents', y='non_bin_model_price')
-    sns.lineplot(data=merged, x='price_cents', y='bin_model_price')
-    sns.lineplot(data=price_line['price'])
+    fig, ax = plt.subplots(1, 2)
+
+    sns.lineplot(data=merged, x='price_cents', y='non_bin_model_price', ax=ax[0], label='non-binary contracts')
+    sns.lineplot(data=merged, x='price_cents', y='bin_model_price', ax=ax[1], label='binary contracts')
+    sns.lineplot(data=price_line, ax=ax[0], label='perfect calibration')
+    sns.lineplot(data=price_line, ax=ax[1], label='perfect calibration')
+
+    for idx in [0, 1]:
+        ax[idx].set_xlabel('trade price')
+        ax[idx].set_ylabel('probability resolved YES')
+        ax[idx].set_title(f'Contract price calibration {date_util.from_str(config["calibration-model-fit-begin-date"])} to {date}')
     plt.show()
 
 
@@ -274,7 +294,7 @@ def main():
 
     if args.eval:
         for binary in [False, True]:
-            snapshot_df = sample_date(date_util.from_str(args.date), binary, config)
+            snapshot_df = sample_date(date_util.from_str(args.date), binary, config.component_params('calibration-model-fit-sample'))
             snapshot_df = pi_trading_lib.df_annotators.add_resolution(snapshot_df, cid_col='contract_id')
             snapshot_df = snapshot_df.merge(model_df, left_on='trade_price', right_index=True, how='left')
             snapshot_df = snapshot_df.dropna()

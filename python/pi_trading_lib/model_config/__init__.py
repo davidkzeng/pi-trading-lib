@@ -43,19 +43,27 @@ class Config:
 
 
 def guess_param_type(val: str, param: str) -> ParamValue:
+    # date str
     if 'date' in param:
         return val
 
+    # bool
     if val in ['true', 'True']:
         return True
     elif val in ['false', 'False']:
         return False
 
+    # none
+    if val in ['none', 'None']:
+        return None
+
+    # float
     try:
         return float(val)
     except ValueError:
         pass
 
+    # str
     return val
 
 

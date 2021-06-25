@@ -42,7 +42,8 @@ def _hashable(val):
     return val
 
 
-def memoize():
+# TODO: auto-treat config as a special arg, filter out
+def memoize(config_prefix: t.Optional[str] = None):
     def memoize_decorator(func):
         _memo_map = {}
 

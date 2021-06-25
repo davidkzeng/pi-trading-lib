@@ -63,6 +63,8 @@ def _get_contract_resolution_raw(ids: t.List[int]) -> t.Dict[int, t.Optional[flo
 
     return resolution
 
+# ========================= Updates =========================
+
 
 def audit_resolutions():
     audit_passed = True
@@ -118,8 +120,6 @@ def audit_resolutions():
 
     pi_trading_lib.timers.report_timers()
 
-
-# ========================= Updates =========================
 
 @pi_trading_lib.timers.timer
 def update_contract_resolutions():

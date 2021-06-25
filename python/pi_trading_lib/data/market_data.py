@@ -146,7 +146,7 @@ class MarketDataSnapshot:
         return MarketDataSnapshot(new_data)
 
 
-@functools.lru_cache()
+@functools.lru_cache(maxsize=None)
 @pi_trading_lib.timers.timer
 def get_snapshot(timestamp: t.Union[datetime.datetime, datetime.date], contracts: t.Optional[t.Tuple[int, ...]] = None) -> MarketDataSnapshot:
     time: t.Optional[datetime.datetime] = None

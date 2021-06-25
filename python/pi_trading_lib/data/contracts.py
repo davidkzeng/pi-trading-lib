@@ -231,3 +231,20 @@ def update_contract_info(date):
 
     print('Updating alive date range for contracts')
     update_contract_dates(list(daily_contracts.keys()), date)
+
+
+def main():
+    import pandas as pd
+    import pi_trading_lib.df_annotators
+
+    all_contracts = get_contracts()
+    contract_df = pd.DataFrame(all_contracts).T
+    contract_df = pi_trading_lib.df_annotators.add_name(contract_df, cid_col='id')
+    contract_df = pi_trading_lib.df_annotators.add_resolution(contract_df, cid_col='id')
+    contract_df = pi_trading_lib.df_annotators.add_is_binary(contract_df, cid_col='id')
+    contract_df = contract_df.drop(['id', 'name'], axis=1)
+    print(contract_df.to_csv())
+
+
+if __name__ == "__main__":
+    main()
