@@ -3,7 +3,7 @@ import typing as t
 
 import pandas as pd
 
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 
 
 class Fill:
@@ -33,7 +33,7 @@ class Fill:
         self.info.update({'cid': book_info.name})
 
     def add_sim_info(self, date: datetime.date, fill_id: int):
-        self.info.update({'date': date_util.to_str(date), 'fill_id': fill_id})
+        self.info.update({'date': datetime_ext.to_str(date), 'fill_id': fill_id})
 
     def add_model_info(self, model_info: t.Dict[str, t.Any]):
         # TODO: do some safety check in columns

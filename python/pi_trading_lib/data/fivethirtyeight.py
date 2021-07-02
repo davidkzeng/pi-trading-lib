@@ -11,7 +11,7 @@ import json
 import pandas as pd  # type: ignore
 
 import pi_trading_lib
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.fs as fs
 import pi_trading_lib.decorators
 import pi_trading_lib.states as states
@@ -66,13 +66,13 @@ def archive_data(date: datetime.date) -> None:
             location = row['location']
 
             if (
-                    (begin_date and date < date_util.from_str(begin_date)) or
-                    (end_date and date > date_util.from_str(end_date))
+                    (begin_date and date < datetime_ext.from_str(begin_date)) or
+                    (end_date and date > datetime_ext.from_str(end_date))
                ):
                 logging.info("Out of date range, ignoring data source {name}".format(name=name))
                 continue
 
-            save_location = data_archive.get_data_file(name, {'date': date_util.to_str(date)})
+            save_location = data_archive.get_data_file(name, {'date': datetime_ext.to_str(date)})
             if os.path.exists(save_location):
                 logging.info(f"Data already exists: {save_location}")
                 continue
@@ -96,7 +96,7 @@ def _get_data_sources():
 
 def get_csv(name: str, date: datetime.date) -> t.Optional[str]:
     assert name in _get_data_sources()
-    data_file = data_archive.get_data_file(name, {'date': date_util.to_str(date)})
+    data_file = data_archive.get_data_file(name, {'date': datetime_ext.to_str(date)})
     return data_file
 
 
@@ -110,7 +110,7 @@ def _process_pres_state_2020(df: pd.DataFrame) -> pd.DataFrame:
 def get_df(name: str, begin_date: datetime.date, end_date: datetime.date) -> pd.DataFrame:
     """Get market data dataframe, including begin_date and end_date"""
     base_df = pd.concat(
-        [pd.read_csv(get_csv(name, date)) for date in date_util.date_range(begin_date, end_date)], axis=0
+        [pd.read_csv(get_csv(name, date)) for date in datetime_ext.date_range(begin_date, end_date)], axis=0
     )
 
     if name == 'pres_state_2020':

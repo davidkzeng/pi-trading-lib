@@ -15,7 +15,7 @@ from pi_trading_lib.data.resolution import NO_CORRECT_CONTRACT_MARKETS, UNRESOLV
 from pi_trading_lib.model import Model
 import pi_trading_lib.data.contracts
 import pi_trading_lib.data.market_data as market_data
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.decorators
 import pi_trading_lib.df_annotators
 import pi_trading_lib.fs as fs
@@ -62,7 +62,7 @@ def sample_date(date: datetime.date, binary: bool, config: model_config.Config) 
 @pi_trading_lib.timers.timer
 def sample(begin_date: datetime.date, end_date: datetime.date, binary: bool, config: model_config.Config):
     dfs = []
-    for date in date_util.date_range(begin_date, end_date, skip_dates=market_data.missing_market_data_days()):
+    for date in datetime_ext.date_range(begin_date, end_date, skip_dates=market_data.missing_market_data_days()):
         date_sample_df = sample_date(date, binary, config.component_params('calibration-model-fit-sample'))
         dfs.append(date_sample_df)
     all_samples_df = pd.concat(dfs)
@@ -98,9 +98,9 @@ def fit_model(date: datetime.date, binary: bool, config: model_config.Config) ->
     series_name = 'bin' if binary else 'non_bin'
     cents_index = np.array([i for i in range(1, 100)])
 
-    begin_date = date_util.from_str(config['calibration-model-fit-begin-date'])
+    begin_date = datetime_ext.from_str(config['calibration-model-fit-begin-date'])
 
-    sample_df = sample(begin_date, date_util.prev(date), binary, config)
+    sample_df = sample(begin_date, datetime_ext.prev(date), binary, config)
 
     if config['calibration-model-fit-market-resample-seed'] is not None:
         # used for bootstrap estimate of fitted model parameter distribution
@@ -191,7 +191,7 @@ class CalibrationModel(Model):
         return snapshot
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
-        if date < date_util.from_str(config['calibration-model-active-date']):
+        if date < datetime_ext.from_str(config['calibration-model-active-date']):
             return None
 
         model = get_model_df(generate_parameters(date, config))
@@ -258,7 +258,7 @@ def generate_confidence_intervals(config: model_config.Config, date: datetime.da
     for idx in [0, 1]:
         ax[idx].set_xlabel('trade price')
         ax[idx].set_ylabel('probability resolved YES')
-        ax[idx].set_title(f'Contract price calibration {date_util.from_str(config["calibration-model-fit-begin-date"])} to {date}')
+        ax[idx].set_title(f'Contract price calibration {datetime_ext.from_str(config["calibration-model-fit-begin-date"])} to {date}')
     plt.show()
 
 
@@ -289,14 +289,14 @@ def main():
     config = model_config.get_config('calibration_model').component_params('calibration-model-fit')
     config = pi_trading_lib.model_config.override_config(config, args.override)
 
-    model_df = get_model_df(generate_parameters(date_util.from_str(args.date), config))
+    model_df = get_model_df(generate_parameters(datetime_ext.from_str(args.date), config))
     model_df['price'] = model_df.index.get_level_values(0) / 100
     model_df = model_df.reset_index(drop=True)
     model_df = model_df.set_index('price', drop=False)
 
     if args.eval:
         for binary in [False, True]:
-            snapshot_df = sample_date(date_util.from_str(args.date), binary, config.component_params('calibration-model-fit-sample'))
+            snapshot_df = sample_date(datetime_ext.from_str(args.date), binary, config.component_params('calibration-model-fit-sample'))
             snapshot_df = pi_trading_lib.df_annotators.add_resolution(snapshot_df, cid_col='contract_id')
             snapshot_df = snapshot_df.merge(model_df, left_on='trade_price', right_index=True, how='left')
             snapshot_df = snapshot_df.dropna()
@@ -320,7 +320,7 @@ def main():
             prof_per_share = snapshot_df['prof'].mean()
             print(ther_prof, prof_per_share)
     elif args.conf:
-        generate_confidence_intervals(config, date_util.from_str(args.date), args.conf_samples)
+        generate_confidence_intervals(config, datetime_ext.from_str(args.date), args.conf_samples)
     else:
         print(model_df)
 

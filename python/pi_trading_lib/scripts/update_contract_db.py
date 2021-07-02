@@ -1,6 +1,6 @@
 import argparse
 
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
 import pi_trading_lib.data.market_data as market_data
@@ -19,13 +19,13 @@ def main():
 
     args = parser.parse_args()
 
-    begin_date = date_util.from_str(args.begin_date)
-    end_date = date_util.from_str(args.end_date)
+    begin_date = datetime_ext.from_str(args.begin_date)
+    end_date = datetime_ext.from_str(args.end_date)
 
     if args.data_archive:
         pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
-    for date in date_util.date_range(begin_date, end_date):
+    for date in datetime_ext.date_range(begin_date, end_date):
         print('Running for', date)
         contracts.update_contract_info(date)
         history.update_bbo_change_count_history(date, replace=args.force_history)

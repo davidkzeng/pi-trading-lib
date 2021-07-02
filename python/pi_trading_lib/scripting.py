@@ -11,7 +11,7 @@ import pi_trading_lib.data.contracts as contracts
 import pi_trading_lib.states as states
 import pi_trading_lib.logging_ext as logging
 
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 
 logging.init_logging(WARN)
 

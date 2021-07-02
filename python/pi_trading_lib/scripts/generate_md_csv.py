@@ -3,14 +3,14 @@ import argparse
 import subprocess
 import logging
 
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.utils
 import pi_trading_lib.data.data_archive
 import pi_trading_lib.logging_ext
 
 
 def _run_converter(date, force=False):
-    date_str = date_util.to_str(date)
+    date_str = datetime_ext.to_str(date)
     input_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_raw', {'date': date_str})
     output_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_csv', {'date': date_str})
 
@@ -47,13 +47,13 @@ def main():
     if args.verbose:
         pi_trading_lib.logging_ext.init_logging(logging.DEBUG)
 
-    begin_date = date_util.from_str(args.begin_date)
-    end_date = date_util.from_str(args.end_date)
+    begin_date = datetime_ext.from_str(args.begin_date)
+    end_date = datetime_ext.from_str(args.end_date)
 
     if args.data_archive:
         pi_trading_lib.data.data_archive.set_archive_dir(args.data_archive)
 
-    for date in date_util.date_range(begin_date, end_date):
+    for date in datetime_ext.date_range(begin_date, end_date):
         _run_converter(date, force=args.force)
 
 

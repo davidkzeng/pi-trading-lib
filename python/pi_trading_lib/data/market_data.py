@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 
 import pi_trading_lib.data.data_archive as data_archive
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.decorators
 import pi_trading_lib.data.contracts
 import pi_trading_lib.timers
@@ -21,7 +21,7 @@ COLUMNS = ['timestamp', 'market_id', 'contract_id', 'bid_price', 'ask_price', 't
 @functools.lru_cache()
 def missing_market_data_days() -> t.List[datetime.date]:
     with open(data_archive.get_data_file('bad_md_days')) as f:
-        bad_days = [date_util.from_str(line.rstrip()) for line in f]
+        bad_days = [datetime_ext.from_str(line.rstrip()) for line in f]
     return bad_days
 
 
@@ -40,7 +40,7 @@ def get_market_data_start() -> datetime.date:
 @pi_trading_lib.timers.timer
 def get_raw_data(date: datetime.date) -> pd.DataFrame:
     """Get raw data for date as dataframe"""
-    market_data_file = data_archive.get_data_file('market_data_csv', {'date': date_util.to_str(date)})
+    market_data_file = data_archive.get_data_file('market_data_csv', {'date': datetime_ext.to_str(date)})
     if not os.path.exists(market_data_file):
         logging.warn('No raw market data for {date}'.format(date=str(date)))
         md_df = pd.DataFrame([], columns=COLUMNS)
@@ -118,7 +118,7 @@ def get_df(begin_date: datetime.date, end_date: datetime.date, **filter_kwargs) 
     """Get market data between [begin_date, end_date], inclusive"""
     # TODO: Support intraday snapshots
     df = pd.concat(
-        [get_filtered_data(date, **filter_kwargs) for date in date_util.date_range(begin_date, end_date)],
+        [get_filtered_data(date, **filter_kwargs) for date in datetime_ext.date_range(begin_date, end_date)],
         axis=0
     )
     df = _annotate(df)

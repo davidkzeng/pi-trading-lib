@@ -10,7 +10,7 @@ from pi_trading_lib.model import Model
 import pi_trading_lib.data.contract_groups as contract_groups
 import pi_trading_lib.data.fivethirtyeight as fte
 import pi_trading_lib.data.market_data as market_data
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.model_config as model_config
 import pi_trading_lib.states as states
 
@@ -93,19 +93,19 @@ class NaiveModel(Model):
         return np.sort(np.array(list(NaiveModel._get_state_contract_ids())))
 
     def get_universe(self, config: model_config.Config, date: datetime.date) -> np.ndarray:
-        if date > date_util.from_str(config['election-model-end-date']):
+        if date > datetime_ext.from_str(config['election-model-end-date']):
             return np.array([])
         return NaiveModel._get_universe()
 
     def get_price(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
-        if date > date_util.from_str(config['election-model-end-date']):
+        if date > datetime_ext.from_str(config['election-model-end-date']):
             return None
         state_model = self._get_state_contract_model(date)
         state_model = state_model.reindex(self.get_universe(config, date))
         return state_model['winstate_chal']  # type: ignore
 
     def get_factor(self, config: model_config.Config, date: datetime.date) -> t.Optional[pd.Series]:
-        if date > date_util.from_str(config['election-model-end-date']):
+        if date > datetime_ext.from_str(config['election-model-end-date']):
             return None
         state_model = self._get_state_contract_model(date)
         state_model = state_model.reindex(self.get_universe(config, date))

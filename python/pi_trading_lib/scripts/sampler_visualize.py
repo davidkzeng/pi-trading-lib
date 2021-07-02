@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from scipy import stats
 import pandas as pd
 
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.data.market_data
 import pi_trading_lib.utils
 
@@ -29,12 +29,12 @@ def main():
     begin_date = datetime.datetime.strptime(args.begin_date, '%Y%m%d').date()
     end_date = datetime.datetime.strptime(args.end_date, '%Y%m%d').date()
 
-    rg = date_util.date_range(begin_date, end_date)
+    rg = datetime_ext.date_range(begin_date, end_date)
 
     dfs = []
     for d in rg:
         if not pi_trading_lib.data.market_data.bad_market_data(d):
-            date_str = date_util.to_str(d)
+            date_str = datetime_ext.to_str(d)
             input_uri = pi_trading_lib.data.data_archive.get_data_file('market_data_csv', {'date': date_str})
             output_uri = pi_trading_lib.data.data_archive.get_data_file('sampler', {'date': date_str})
             cmd = [

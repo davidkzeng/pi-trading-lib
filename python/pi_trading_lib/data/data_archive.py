@@ -5,7 +5,7 @@ import os
 import datetime
 
 import pi_trading_lib
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 
 # reads from environment for easier interactive workflows
 _archive_dir = os.environ.get('PI_DATA_ARCHIVE')
@@ -32,7 +32,7 @@ def _get_data_archives() -> t.Dict[str, t.Tuple[str, t.Optional[datetime.date]]]
         for row in reader:
             archive_name = row['name']
             archive_location = os.path.join(get_archive_dir(), row['location'])
-            begin_date = date_util.from_str(row['begin_date']) if row['begin_date'] else None
+            begin_date = datetime_ext.from_str(row['begin_date']) if row['begin_date'] else None
             data_archives[archive_name] = archive_location, begin_date
     return data_archives
 
@@ -42,7 +42,7 @@ def get_data_file(name: str, template_vals: t.Dict[str, t.Any] = {}) -> str:
     location_template = data_archives[name][0]
 
     if 'date' in template_vals and isinstance(template_vals['date'], datetime.date):
-        template_vals['date'] = date_util.to_str(template_vals['date'])
+        template_vals['date'] = datetime_ext.to_str(template_vals['date'])
     location = location_template.format(**template_vals)
 
     return location

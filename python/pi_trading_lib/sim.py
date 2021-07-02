@@ -16,7 +16,7 @@ from pi_trading_lib.models.fte_election import NaiveModel
 from pi_trading_lib.score import SimResult
 import pi_trading_lib.data.market_data as market_data
 import pi_trading_lib.data.resolution
-import pi_trading_lib.date_util as date_util
+import pi_trading_lib.datetime_ext as datetime_ext
 import pi_trading_lib.decorators
 import pi_trading_lib.logging_ext as logging_ext
 import pi_trading_lib.model_config as model_config
@@ -113,7 +113,7 @@ def daily_sim(begin_date: datetime.date, end_date: datetime.date,
     book_summaries = []
     cid_summaries = []
 
-    for cur_date in date_util.date_range(begin_date, end_date):
+    for cur_date in datetime_ext.date_range(begin_date, end_date):
         logging.info('sim for: ' + str(cur_date))
 
         if market_data.bad_market_data(cur_date):
@@ -176,8 +176,8 @@ def main(argv):
     config = model_config.get_config(args.config)
 
     def run_sim(sim_config: model_config.Config) -> SimResult:
-        return daily_sim(date_util.from_str(sim_config['sim-begin-date']),
-                         date_util.from_str(sim_config['sim-end-date']), sim_config)
+        return daily_sim(datetime_ext.from_str(sim_config['sim-begin-date']),
+                         datetime_ext.from_str(sim_config['sim-end-date']), sim_config)
 
     search = []
     if args.search:
