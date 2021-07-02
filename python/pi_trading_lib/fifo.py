@@ -8,7 +8,8 @@ import pandas as pd
 @dataclass
 class FifoEntry:
     cid: int
-    price: float  # price should be the the cost of increasing the long/short position (determined by qty)
+    # price should be the the cost assuming we are increasing the long/short position (determined by qty)
+    price: float
     qty: float
 
     def __post_init__(self):
@@ -24,11 +25,15 @@ class Fifo:
         self.cid_realized_pnl = {} # cid -> float
         self.cid_fees = {} # cid -> float
 
-    def process_pos_change(self, changes: pd.DataFrame):
+    def process_pos_change(self, changes: pd.DataFrame) -> pd.Series:
+        change_costs = {}
         for cid, change in changes.iterrows():
             qty, price = change['qty'], change['price']
             entry = FifoEntry(cid, price, qty)
-            self.apply_fifo(entry)
+            cost = self.apply_fifo(entry)
+            change_costs[cid] = cost
+        cost_ser = pd.Series(change_costs, name='cost')
+        return cost_ser
 
     def resolve(self, cids: t.Dict[int, float]):
         for cid, res in cids.items():
@@ -48,7 +53,8 @@ class Fifo:
                 assert len(self.cid_fifo[cid]) == 0
                 del self.cid_fifo[cid]
 
-    def apply_fifo(self, entry: FifoEntry):
+    def apply_fifo(self, entry: FifoEntry) -> float:
+        cost = 0.0
         cid = entry.cid
 
         if cid not in self.cid_fifo:
@@ -64,16 +70,18 @@ class Fifo:
             if (front.qty > 0) == (entry.qty > 0):
                 break
 
-            self._match(front, entry)
+            cost += self._match(front, entry)
             if front.qty == 0:
                 cid_queue.popleft()
 
         if entry.qty != 0:
             cid_queue.append(entry)
+            cost += abs(entry.price * entry.qty)
 
         self._check_invariant(cid)
+        return cost
 
-    def _match(self, old: FifoEntry, new: FifoEntry):
+    def _match(self, old: FifoEntry, new: FifoEntry) -> float:
         assert old.cid == new.cid
         assert (old.qty > 0) != (new.qty > 0)
 
@@ -84,16 +92,24 @@ class Fifo:
         if cid not in self.cid_fees:
             self.cid_fees[cid] = 0.0
 
+        # one way to think of this is that we pay the cost to go both long and short, and then get rewarded with a guaranteed payoff of 1
         if abs(old.qty) >= abs(new.qty):
-            self.cid_realized_pnl[cid] += abs(new.qty) * (1 - new.price - old.price)
-            self.cid_fees[cid] += max(0, 0.1 * abs(new.qty) * (1 - new.price - old.price))
-            old.qty += new.qty
+            match_qty = new.qty
+            fee = max(0, 0.1 * abs(match_qty) * (1 - new.price - old.price))
+            cost = fee + (abs(match_qty) * (new.price - 1))
+            self.cid_realized_pnl[cid] += abs(match_qty) * (1 - new.price - old.price)
+            self.cid_fees[cid] += fee
+            old.qty += match_qty
             new.qty = 0
         else:
-            self.cid_realized_pnl[cid] += abs(old.qty) * (1 - new.price - old.price)
-            self.cid_fees[cid] += max(0, 0.1 * abs(old.qty) * (1 - new.price - old.price))
-            new.qty += old.qty
+            match_qty = old.qty
+            fee = max(0, 0.1 * abs(match_qty) * (1 - new.price - old.price))
+            cost = fee + (abs(match_qty) * (new.price - 1))
+            self.cid_realized_pnl[cid] += abs(match_qty) * (1 - new.price - old.price)
+            self.cid_fees[cid] += fee
+            new.qty += match_qty
             old.qty = 0
+        return cost
 
     def _check_invariant(self, cid: int):
         if cid in self.cid_fifo:

@@ -151,9 +151,13 @@ def daily_sim(begin_date: datetime.date, end_date: datetime.date,
 def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='current')
-    parser.add_argument('--search')
-    parser.add_argument('--debug', action='store_true')
+
+    # parameter related
+    parser.add_argument('--search', nargs='*')
+    parser.add_argument('--autotune')
     parser.add_argument('--override', default='')
+
+    parser.add_argument('--debug', action='store_true')
     parser.add_argument('--force', nargs='*')
     parser.add_argument('--force-all', action='store_true')
 
@@ -175,12 +179,13 @@ def main(argv):
         return daily_sim(date_util.from_str(sim_config['sim-begin-date']),
                          date_util.from_str(sim_config['sim-end-date']), sim_config)
 
+    search = []
     if args.search:
-        search = tune.parse_search(args.search)
-    else:
-        search = []
+        for search_str in args.search:
+            parsed_search = tune.parse_search(search_str)
+            search.extend(parsed_search)
 
-    tune.grid_search(config, search, args.override, run_sim)
+    tune.tune(config, search, args.override, run_sim)
 
     pi_trading_lib.timers.report_timers()
 

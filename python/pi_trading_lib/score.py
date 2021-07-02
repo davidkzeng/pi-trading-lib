@@ -1,4 +1,5 @@
 import os
+import math
 import typing as t
 
 import pandas as pd
@@ -46,7 +47,7 @@ class SimResult:
 
     @property
     def score(self):
-        return self.book_summary.iloc[0]['value']
+        return self.sharpe
 
     @property
     def ndays(self):
@@ -54,10 +55,20 @@ class SimResult:
 
     @property
     def daily_pnl(self) -> pd.Series:
-        return (self.daily_summary['value'] - self.daily_summary['value'].shift()).dropna()
+        return (self.daily_summary['mark_pnl'] - self.daily_summary['mark_pnl'].shift()).dropna()
+
+    @property
+    def mu(self):
+        return self.daily_pnl.mean()
+
+    @property
+    def sigma(self):
+        return self.daily_pnl.std()
+
+    @property
+    def tstat(self):
+        return self.mu / (self.sigma / math.sqrt(self.ndays))
 
     @property
     def sharpe(self):
-        mu = self.daily_pnl.mean()
-        sigma = self.daily_pnl.std()
-        return mu / sigma
+        return math.sqrt(365) * self.mu / self.sigma

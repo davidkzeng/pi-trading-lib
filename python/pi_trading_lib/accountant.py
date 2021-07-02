@@ -129,7 +129,7 @@ class Book:
 
         self.fees = self.fifo.fees().reindex(self.universe.cids).fillna(0.0).to_numpy()
         # incorporate fees into mark_pnl once we have proper running estimate
-        self.mark_pnl = self.mark_value - self.net_cost - self.fees
+        self.mark_pnl = self.mark_value - self.net_cost
 
     def set_mark_price(self, mark_price: pd.Series):
         mark_price = mark_price.reindex(self.universe.cids).to_numpy()
@@ -152,7 +152,15 @@ class Book:
         assert not np.any(missing_price & (change.diff != 0)), "position change with missing price snapshot"
 
         # We assume here that liquidity at TOB is enough to implement the position change
-        change_cost = -1 * np.nan_to_num(change.sb_qty * (1 - ask_price) - change.bb_qty * ask_price + change.bs_qty * bid_price - change.ss_qty * (1 - bid_price), 0.0)
+        fifo_df = pd.DataFrame([], index=self.universe.cids)
+        fifo_df['qty'] = change.diff
+        fifo_df['price'] = np.nan
+        fifo_df['price'] = fifo_df['price'].mask(fifo_df['qty'] > 0, ask_price)
+        fifo_df['price'] = fifo_df['price'].mask(fifo_df['qty'] < 0, (1 - bid_price))
+        fifo_df = fifo_df.dropna()
+        change_cost = self.fifo.process_pos_change(fifo_df)
+        change_cost = change_cost.reindex(self.universe.cids).fillna(0.0).to_numpy()
+
         exe_value = np.abs(
             np.nan_to_num(change.sb_qty * (1 - ask_price), 0.0) +
             np.nan_to_num(-1 * change.bb_qty * ask_price, 0.0) +
@@ -164,14 +172,6 @@ class Book:
         self.exe_qty += change.exe_qty()
         self.exe_value += np.abs(exe_value)
         self.net_cost += change_cost
-
-        fifo_df = pd.DataFrame([], index=self.universe.cids)
-        fifo_df['qty'] = change.diff
-        fifo_df['price'] = np.nan
-        fifo_df['price'] = fifo_df['price'].mask(fifo_df['qty'] > 0, ask_price)
-        fifo_df['price'] = fifo_df['price'].mask(fifo_df['qty'] < 0, (1 - bid_price))
-        fifo_df = fifo_df.dropna()
-        self.fifo.process_pos_change(fifo_df)
 
         self._recompute()
 

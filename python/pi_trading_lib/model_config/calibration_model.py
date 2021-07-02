@@ -11,7 +11,8 @@ config: t.Dict = {
     'calibration-model-fit-sample-no-correct': False,
 
     'calibration-model-active-date': '20201201',
-    'calibration-model-enable-binary': True,
+    'calibration-model-enable-binary': False,
     'calibration-model-enable-non-binary': True,
+
     'calibration-model-enabled': False,
 }

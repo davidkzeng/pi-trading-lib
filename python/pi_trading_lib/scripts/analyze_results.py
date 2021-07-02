@@ -24,7 +24,7 @@ def main():
     parser.add_argument('path')
     subparsers = parser.add_subparsers(dest='subparser', required=True)
 
-    subparsers.add_parser('plot')
+    subparsers.add_parser('book')
     subparsers.add_parser('pnl')
 
     marginal_parser = subparsers.add_parser('marginal')
@@ -45,11 +45,12 @@ def main():
 
     sim_result = SimResult.load(args.path)
 
-    if args.subparser == 'plot':
+    if args.subparser == 'book':
         sim_result.daily_summary[['capital', 'pos_value', 'value', 'pos_cost', 'mark_pnl']].plot()
         plt.show()
     elif args.subparser == 'pnl':
-        print(sim_result.sharpe)
+        print('sharpe', sim_result.sharpe)
+        print('tstat', sim_result.tstat)
         sim_result.daily_pnl.cumsum().plot()
         plt.show()
     elif args.subparser == 'cids':
@@ -80,10 +81,14 @@ def main():
         fills = df_annotators.add_resolution(fills)
         print_df(fills, args.csv)
     elif args.subparser == 'marginal':
-        alt_sim = [SimResult.load(path) for path in args.alt]
-        df = pd.DataFrame([], index=alt_sim.daily_pnl.index)
-        df['marginal'] = alt_sim.daily_summary['mark_pnl'] - sim_result.daily_summary['mark_pnl']
-        df.plot()
+        alt_sims = [SimResult.load(path) for path in args.alt]
+        marginals = []
+        for alt_sim in alt_sims:
+            marginal = alt_sim.daily_summary['mark_pnl'] - sim_result.daily_summary['mark_pnl']
+            marginals.append(marginal)
+        marginal_df = pd.concat(marginals, axis=1)
+        marginal_df.plot()
+        plt.show()
 
 
 if __name__ == "__main__":

@@ -1,11 +1,14 @@
 import typing as t
 
 from pi_trading_lib.model_config import Config
+from pi_trading_lib.model_config.tuning_params import tuning_configs
 from pi_trading_lib.score import SimResult
 import pi_trading_lib.model_config
 
 
-def grid_search(config: Config, _search: t.List[t.Dict], override_str: str, sim_fn: t.Callable[[Config], SimResult]) -> t.Tuple[Config, SimResult]:
+def tune(config: Config, _search: t.List[t.Dict], override_str: str,
+         tuning_config_name: t.Optional[str],
+         sim_fn: t.Callable[[Config], SimResult]) -> t.Tuple[Config, SimResult]:
     search: t.List[t.Dict] = [{}] + _search
 
     base_config = config
