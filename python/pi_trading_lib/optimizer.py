@@ -103,6 +103,10 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
         net_cost + cp.multiply(price_s, delta_ss) <= PIPOSITION_LIMIT_VALUE,
     ]
 
+    # this isn't literally the stdev, just trying to convey the idea that as the position size increases, we
+    # want the edge required to increase linearly
+    # maybe we want to do something more like kelly-betting instead of creating fake
+    # variance as if it's normal distributed?
     stdev_return = cp.sum_squares(new_pos)
 
     # add constant for when margin_factors is empty to ensure obj_factor has type Expr
@@ -112,7 +116,9 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
 
     objective = obj_return + obj_std + obj_factor
     problem = cp.Problem(cp.Maximize(objective), constraints)
-    problem.solve(solver=cp.ECOS, abstol=2.0, reltol=1e-4, feastol=1e-6)
+
+    # TODO: surround in try catch that gives a 0 pos change if it cannot solve
+    problem.solve(solver=cp.ECOS, abstol=2.0, reltol=1e-4, feastol=1e-4, verbose=True)
 
     if problem.status not in cvxpy.settings.SOLUTION_PRESENT:
         print(problem.status)

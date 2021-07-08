@@ -185,7 +185,7 @@ def main(argv):
             parsed_search = tune.parse_search(search_str)
             search.extend(parsed_search)
 
-    tune.tune(config, search, args.override, run_sim)
+    tune.tune(config, search, args.override, None, run_sim)
 
     pi_trading_lib.timers.report_timers()
 
