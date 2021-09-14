@@ -3,6 +3,7 @@ rust:
 
 rust-release:
 	cargo build --release --manifest-path=rust/Cargo.toml
+	mkdir -p python/pi_trading_lib/rust_bin
 	find rust/target/release -maxdepth 1 -type f | grep -v "\." | xargs -I {} cp {} python/pi_trading_lib/rust_bin/
 
 rust-test:
