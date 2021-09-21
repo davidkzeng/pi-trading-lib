@@ -118,12 +118,30 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     problem = cp.Problem(cp.Maximize(objective), constraints)
 
     # TODO: surround in try catch that gives a 0 pos change if it cannot solve
-    problem.solve(solver=cp.ECOS, abstol=2.0, reltol=1e-4, feastol=1e-4, verbose=True)
+    try:
+        problem.solve(solver=cp.ECOS, abstol=2.0, reltol=1e-4, feastol=1e-4, verbose=True)
+    except cp.error.SolverError as e:
+        solver_error = True
+        print('Solver error', str(e))
+    else:
+        solver_error = False
 
     if problem.status not in cvxpy.settings.SOLUTION_PRESENT:
-        print(problem.status)
+        print('Solver completed with unexpected status', problem.status)
         print(delta_bb.value, delta_bs.value, delta_sb.value, delta_ss.value)
-        assert False
+        solver_error = True
+
+    if solver_error:
+        if not config['optimizer-allow-unsolved']:
+            assert False
+
+        opt_res = {
+            'new_pos': cur_position,
+            'agg_price_model': agg_price_model,
+        }
+        df = pd.DataFrame(opt_res, index=snapshot.universe)
+        df['take_edge'] = 0.0
+        return df
 
     logging.info((obj_return.value, obj_std.value, obj_factor.value))
 
