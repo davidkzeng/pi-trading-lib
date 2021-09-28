@@ -117,7 +117,6 @@ def optimize(book: Book, snapshot: MarketDataSnapshot, price_models: t.List[pd.S
     objective = obj_return + obj_std + obj_factor
     problem = cp.Problem(cp.Maximize(objective), constraints)
 
-    # TODO: surround in try catch that gives a 0 pos change if it cannot solve
     try:
         problem.solve(solver=cp.ECOS, abstol=2.0, reltol=1e-4, feastol=1e-4, verbose=True)
     except cp.error.SolverError as e:
